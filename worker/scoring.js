@@ -1,10 +1,6 @@
 const MIN_UA_LENGTH = 8;
 
 export async function scoreRequest(input, env) {
-  if (!env?.KV) {
-    throw new Error("KV binding KV is required");
-  }
-
   let score = 0;
   const ua = normalize(input.ua);
   const path = normalize(input.path).toLowerCase();
@@ -17,7 +13,7 @@ export async function scoreRequest(input, env) {
     score += 10;
   }
 
-  if (input.ip && await isBadIp(input.ip, env.KV)) {
+  if (input.ip && env?.KV && await isBadIp(input.ip, env.KV)) {
     score += 60;
   }
 

@@ -1,4 +1,5 @@
 import { challengeHtml, checkScript } from "./challenge.js";
+import { installSnippet } from "./installer.js";
 import { scoreRequest } from "./scoring.js";
 import {
   getValidToken,
@@ -20,6 +21,14 @@ export default {
           "cache-control": "no-store"
         }
       });
+    }
+
+    if (request.method === "POST" && url.pathname === "/__edge-waf/install") {
+      try {
+        return await installSnippet(request, env);
+      } catch (error) {
+        return jsonResponse({ error: error.message || "install_failed" }, 500);
+      }
     }
 
     if (request.method !== "POST" || url.pathname !== DECISION_PATH) {

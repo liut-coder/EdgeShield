@@ -8,6 +8,24 @@
     "bindings": {
       "KV": {
         "description": "Cloudflare KV namespace for bad IP markers such as bad:<ip> = 1"
+      },
+      "INSTALL_TOKEN": {
+        "description": "Random token required by POST /__edge-waf/install"
+      },
+      "CLOUDFLARE_API_TOKEN": {
+        "description": "Cloudflare API token used by the runtime installer to create the Snippet"
+      },
+      "PROTECTED_HOSTNAME": {
+        "description": "Hostname protected by the Snippet, for example www.example.com"
+      },
+      "PROTECTED_PATH_PREFIX": {
+        "description": "Optional protected path prefix, for example /login"
+      },
+      "CLOUDFLARE_ZONE_ID": {
+        "description": "Optional explicit Cloudflare Zone ID"
+      },
+      "CLOUDFLARE_ZONE_NAME": {
+        "description": "Optional Cloudflare Zone name, for example example.com"
       }
     }
   },
@@ -15,7 +33,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:all": "node scripts/deploy-cloudflare.mjs",
-    "check": "node --check worker/index.js && node --check worker/scoring.js && node --check worker/challenge.js && node --check worker/utils.js && node --check snippets/edge-gate.js && node --check public/check.js && node --check scripts/deploy-snippet.mjs && node --check scripts/deploy-cloudflare.mjs"
+    "check": "node --check worker/index.js && node --check worker/scoring.js && node --check worker/challenge.js && node --check worker/utils.js && node --check worker/installer.js && node --check snippets/edge-gate.js && node --check public/check.js && node --check scripts/deploy-snippet.mjs && node --check scripts/deploy-cloudflare.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

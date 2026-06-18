@@ -303,12 +303,15 @@ async function createOrReuseKvNamespace(namespaceTitle) {
 
 async function generateWranglerConfig({ workerName, kvId }) {
   let toml = await readFile("wrangler.toml", "utf8");
+  const kvConfig = `kv_namespaces = [\n  { binding = "KV", id = "${kvId}" }\n]`;
 
   toml = toml.replace(/^name\s*=\s*"[^"]*"/m, `name = "${workerName}"`);
-  toml = toml.replace(
-    /kv_namespaces\s*=\s*\[[\s\S]*?\]/m,
-    `kv_namespaces = [\n  { binding = "KV", id = "${kvId}" }\n]`
-  );
+
+  if (/kv_namespaces\s*=\s*\[[\s\S]*?\]/m.test(toml)) {
+    toml = toml.replace(/kv_namespaces\s*=\s*\[[\s\S]*?\]/m, kvConfig);
+  } else {
+    toml = `${toml.trimEnd()}\n\n${kvConfig}\n`;
+  }
 
   await writeFile("wrangler.generated.toml", toml);
 }
