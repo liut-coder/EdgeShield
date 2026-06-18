@@ -32,6 +32,8 @@ EdgeShield 在 Cloudflare 边缘拦截请求：Snippet 负责入口转发，Work
 4. 添加下面的必要变量。
 5. 保存并部署。
 
+> 注意：这些值要添加到 Cloudflare 的构建/部署环境变量中，供 `npm run deploy:all` 使用。不要只添加到“为运行时使用的 Worker 定义环境变量和机密”那一栏；运行时变量是在 Worker 已部署后给业务代码读取的，部署脚本读不到。
+
 ## 必填配置
 
 部署需要同时操作 Worker、KV、Snippet 和 Zone 规则。为了减少手工复制，脚本会尽量自动解析 Account 和 Zone：
@@ -90,6 +92,10 @@ CLOUDFLARE_ACCOUNT_NAME=你的 Cloudflare 账号名称
 | `CLOUDFLARE_ACCOUNT_ID` | 多账号时需要 | `0123456789abcdef0123456789abcdef` | 指定部署账号 | Cloudflare 账号首页右侧栏 |
 | `CLOUDFLARE_ACCOUNT_NAME` | 可替代 Account ID | `My Account` | 自动解析 Account ID | Cloudflare Account 名称 |
 | `SNIPPET_EXPRESSION` | 建议填写 | `(http.host eq "www.example.com")` | 限定哪些请求进入 WAF | 按需要填写 Cloudflare Rules 表达式 |
+
+Cloudflare 构建环境区分大小写。推荐使用表格里的标准变量名；脚本也兼容 `zoneid`、`ZONEID`、`CLOUDFLARE_ZONEID` 等常见 Zone ID 写法。
+
+如果你已经填写了 Zone ID 但仍然报缺失，优先检查它是否填在了“运行时变量”里。`deploy:all` 需要的是构建/部署阶段变量。
 
 ### API Token 权限
 

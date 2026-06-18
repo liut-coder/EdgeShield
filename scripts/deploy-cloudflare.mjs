@@ -21,7 +21,15 @@ const config = {
   cloudflareAccountId: firstEnv("CLOUDFLARE_ACCOUNT_ID", "ACCOUNT_ID", "CF_ACCOUNT_ID"),
   cloudflareAccountName: firstEnv("CLOUDFLARE_ACCOUNT_NAME", "ACCOUNT_NAME"),
   cloudflareApiToken: requiredEnv("CLOUDFLARE_API_TOKEN"),
-  cloudflareZoneId: firstEnv("CLOUDFLARE_ZONE_ID", "ZONE_ID", "CF_ZONE_ID"),
+  cloudflareZoneId: firstEnv(
+    "CLOUDFLARE_ZONE_ID",
+    "CLOUDFLARE_ZONEID",
+    "ZONE_ID",
+    "ZONEID",
+    "CF_ZONE_ID",
+    "CF_ZONEID",
+    "zoneid"
+  ),
   cloudflareZoneName: firstEnv("CLOUDFLARE_ZONE_NAME", "ZONE_NAME")
 };
 
@@ -130,14 +138,22 @@ function validateConfig({
   }
 
   if (!cloudflareZoneId && !cloudflareZoneName && !protectedHostname) {
+    const detectedNames = relevantEnvNames();
     throw new Error(
-      "A Cloudflare zone is required for Snippet deployment. Set PROTECTED_HOSTNAME, CLOUDFLARE_ZONE_NAME, or CLOUDFLARE_ZONE_ID."
+      `A Cloudflare zone is required for Snippet deployment. Set PROTECTED_HOSTNAME, CLOUDFLARE_ZONE_NAME, or CLOUDFLARE_ZONE_ID as build/deploy variables, not Worker runtime variables. Detected related env names: ${detectedNames || "none"}.`
     );
   }
 
   if (cloudflareZoneName && !/^[A-Za-z0-9.-]+$/.test(cloudflareZoneName)) {
     throw new Error("CLOUDFLARE_ZONE_NAME must be a domain name such as example.com");
   }
+}
+
+function relevantEnvNames() {
+  return Object.keys(process.env)
+    .filter((name) => /zone|host|snippet/i.test(name))
+    .sort()
+    .join(", ");
 }
 
 async function resolveAccountId({ cloudflareAccountId, cloudflareAccountName, cloudflareApiToken }) {
