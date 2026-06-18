@@ -4,10 +4,18 @@
   "private": true,
   "type": "module",
   "description": "Lightweight edge WAF MVP built on Cloudflare Snippets + Workers.",
+  "cloudflare": {
+    "bindings": {
+      "KV": {
+        "description": "Cloudflare KV namespace for bad IP markers such as bad:<ip> = 1"
+      }
+    }
+  },
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "node --check worker/index.js && node --check worker/scoring.js && node --check worker/challenge.js && node --check worker/utils.js && node --check snippets/edge-gate.js && node --check public/check.js && node --check scripts/deploy-snippet.mjs"
+    "deploy:all": "node scripts/deploy-cloudflare.mjs",
+    "check": "node --check worker/index.js && node --check worker/scoring.js && node --check worker/challenge.js && node --check worker/utils.js && node --check snippets/edge-gate.js && node --check public/check.js && node --check scripts/deploy-snippet.mjs && node --check scripts/deploy-cloudflare.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

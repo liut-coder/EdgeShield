@@ -28,9 +28,33 @@ Install dependencies:
 npm install
 ```
 
-Create a Cloudflare KV namespace, then replace `YOUR_KV_ID` in `wrangler.toml`.
+For full Worker, KV, and Snippet deployment, use:
 
-Deploy the Worker:
+```bash
+npm run deploy:all
+```
+
+Required environment variables:
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+CLOUDFLARE_ZONE_ID
+```
+
+Optional environment variables:
+
+```text
+WORKER_NAME=edge-waf-v0-1
+KV_NAMESPACE=edge-waf-v0-kv
+SNIPPET_NAME=edge_waf_gate
+SNIPPET_EXPRESSION=true
+```
+
+`SNIPPET_EXPRESSION=true` protects the entire zone. Use a hostname expression such as `(http.host eq "www.example.com")` to scope protection.
+
+For Worker-only manual deployment, create a Cloudflare KV namespace, replace `YOUR_KV_ID` in `wrangler.toml`, then deploy:
+
 
 ```bash
 npm run deploy
@@ -50,11 +74,42 @@ const WAF_WORKER_URL = "https://edge-waf-v0-1.YOUR_SUBDOMAIN.workers.dev/__edge-
 
 Deploy that file as a Cloudflare Snippet on the protected zone and attach a Snippet rule. The challenge page inlines the check script, and the Worker also serves `/check.js` directly for standalone testing.
 
-For one-click Worker, KV, and Snippet deployment, use the GitHub Actions workflow below.
+## Cloudflare Visual Deploy
+
+This follows the same deployment shape as projects such as NodeWarden: connect the GitHub repository in Cloudflare, then let Cloudflare run npm scripts.
+
+1. Fork or push this repository to GitHub.
+2. Open [Cloudflare Workers & Pages](https://dash.cloudflare.com/?to=/:account/workers-and-pages/create).
+3. Choose `Continue with GitHub` and select the repository.
+4. Set build command:
+
+```bash
+npm run check
+```
+
+5. Set deploy command:
+
+```bash
+npm run deploy:all
+```
+
+6. Add build variables or secrets:
+
+| Name | Required | Notes |
+| --- | --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Yes | Needs Worker, KV, and Snippets permissions. |
+| `CLOUDFLARE_ACCOUNT_ID` | Yes | Cloudflare account id. |
+| `CLOUDFLARE_ZONE_ID` | Yes | Zone where the Snippet rule will be attached. |
+| `WORKER_NAME` | No | Default `edge-waf-v0-1`. |
+| `KV_NAMESPACE` | No | Default `edge-waf-v0-kv`. |
+| `SNIPPET_NAME` | No | Default `edge_waf_gate`. |
+| `SNIPPET_EXPRESSION` | No | Default `true`; use a hostname expression to limit scope. |
+
+The deploy command creates or reuses the KV namespace, generates a temporary Wrangler config with the real KV id, deploys the Worker, renders the Snippet with the real Worker decision URL, and attaches the Snippet rule.
 
 ## GitHub One-Click Deploy
 
-This repo includes a manual GitHub Actions workflow:
+For GitHub-native deployment, this repo includes a manual GitHub Actions workflow:
 
 ```text
 .github/workflows/deploy-cloudflare.yml
