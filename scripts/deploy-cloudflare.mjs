@@ -14,13 +14,15 @@ const config = {
   kvNamespace: process.env.KV_NAMESPACE || DEFAULTS.kvNamespace,
   snippetName: process.env.SNIPPET_NAME || DEFAULTS.snippetName,
   snippetExpression: process.env.SNIPPET_EXPRESSION || DEFAULTS.snippetExpression,
-  cloudflareAccountId: requiredEnv("CLOUDFLARE_ACCOUNT_ID"),
+  cloudflareAccountId: firstEnv("CLOUDFLARE_ACCOUNT_ID", "ACCOUNT_ID", "CF_ACCOUNT_ID"),
+  cloudflareAccountName: firstEnv("CLOUDFLARE_ACCOUNT_NAME", "ACCOUNT_NAME"),
   cloudflareApiToken: requiredEnv("CLOUDFLARE_API_TOKEN"),
   cloudflareZoneId: firstEnv("CLOUDFLARE_ZONE_ID", "ZONE_ID", "CF_ZONE_ID"),
   cloudflareZoneName: firstEnv("CLOUDFLARE_ZONE_NAME", "ZONE_NAME")
 };
 
 validateConfig(config);
+config.cloudflareAccountId = await resolveAccountId(config);
 config.cloudflareZoneId = await resolveZoneId(config);
 
 const kvId = await createOrReuseKvNamespace(config.kvNamespace);
@@ -31,6 +33,7 @@ await deploySnippet(config);
 
 console.log("");
 console.log("Edge WAF deployment complete");
+console.log(`Account id: ${config.cloudflareAccountId}`);
 console.log(`Worker: ${config.workerName}`);
 console.log(`Worker URL: ${workerUrl}`);
 console.log(`KV namespace: ${config.kvNamespace}`);
@@ -60,7 +63,16 @@ function firstEnv(...names) {
   return "";
 }
 
-function validateConfig({ workerName, kvNamespace, snippetName, snippetExpression, cloudflareZoneId, cloudflareZoneName }) {
+function validateConfig({
+  workerName,
+  kvNamespace,
+  snippetName,
+  snippetExpression,
+  cloudflareAccountId,
+  cloudflareAccountName,
+  cloudflareZoneId,
+  cloudflareZoneName
+}) {
   if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(workerName)) {
     throw new Error("WORKER_NAME must use lowercase letters, digits, and hyphens, max 63 chars");
   }
@@ -77,6 +89,14 @@ function validateConfig({ workerName, kvNamespace, snippetName, snippetExpressio
     throw new Error("SNIPPET_EXPRESSION must not be empty");
   }
 
+  if (cloudflareAccountId && !/^[0-9a-f]{32}$/i.test(cloudflareAccountId)) {
+    throw new Error("CLOUDFLARE_ACCOUNT_ID must be a 32-character hex account id");
+  }
+
+  if (cloudflareAccountName && !/^[\w .:@-]{1,120}$/.test(cloudflareAccountName)) {
+    throw new Error("CLOUDFLARE_ACCOUNT_NAME contains unsupported characters");
+  }
+
   if (cloudflareZoneId && !/^[0-9a-f]{32}$/i.test(cloudflareZoneId)) {
     throw new Error("CLOUDFLARE_ZONE_ID must be a 32-character hex zone id");
   }
@@ -90,6 +110,51 @@ function validateConfig({ workerName, kvNamespace, snippetName, snippetExpressio
   if (cloudflareZoneName && !/^[A-Za-z0-9.-]+$/.test(cloudflareZoneName)) {
     throw new Error("CLOUDFLARE_ZONE_NAME must be a domain name such as example.com");
   }
+}
+
+async function resolveAccountId({ cloudflareAccountId, cloudflareAccountName, cloudflareApiToken }) {
+  if (cloudflareAccountId) {
+    return cloudflareAccountId;
+  }
+
+  const params = new URLSearchParams({ per_page: "50" });
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts?${params}`, {
+    headers: {
+      authorization: `Bearer ${cloudflareApiToken}`,
+      accept: "application/json"
+    }
+  });
+  const text = await response.text();
+  const body = parseJson(text);
+
+  if (!response.ok || body?.success === false) {
+    throw new Error(`Could not resolve Cloudflare account: ${formatApiError(body, text)}`);
+  }
+
+  const accounts = Array.isArray(body?.result) ? body.result : [];
+
+  if (cloudflareAccountName) {
+    const match = accounts.find((account) => account.name === cloudflareAccountName);
+
+    if (!match?.id) {
+      throw new Error(`Cloudflare account not found: ${cloudflareAccountName}`);
+    }
+
+    return match.id;
+  }
+
+  if (accounts.length === 1 && accounts[0]?.id) {
+    return accounts[0].id;
+  }
+
+  if (accounts.length > 1) {
+    const names = accounts.map((account) => account.name || account.id).join(", ");
+    throw new Error(
+      `CLOUDFLARE_ACCOUNT_ID is required because the token can access multiple accounts: ${names}. Set CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_ACCOUNT_NAME.`
+    );
+  }
+
+  throw new Error("No Cloudflare accounts are accessible with the provided API token");
 }
 
 async function resolveZoneId({ cloudflareZoneId, cloudflareZoneName, cloudflareAccountId, cloudflareApiToken }) {
@@ -126,7 +191,8 @@ async function resolveZoneId({ cloudflareZoneId, cloudflareZoneName, cloudflareA
 
 async function createOrReuseKvNamespace(namespaceTitle) {
   const namespacesOutput = await run(npxBin(), ["wrangler", "kv", "namespace", "list"], {
-    capture: true
+    capture: true,
+    env: cloudflareEnv()
   });
   const namespaces = parseWranglerJsonArray(namespacesOutput);
   const existing = namespaces.find((namespace) => namespace.title === namespaceTitle);
@@ -136,7 +202,8 @@ async function createOrReuseKvNamespace(namespaceTitle) {
   }
 
   const createOutput = await run(npxBin(), ["wrangler", "kv", "namespace", "create", namespaceTitle], {
-    capture: true
+    capture: true,
+    env: cloudflareEnv()
   });
   const kvId = parseKvId(createOutput);
 
@@ -161,7 +228,8 @@ async function generateWranglerConfig({ workerName, kvId }) {
 
 async function deployWorker() {
   const output = await run(npxBin(), ["wrangler", "deploy", "--config", "wrangler.generated.toml"], {
-    capture: true
+    capture: true,
+    env: cloudflareEnv()
   });
   const matches = [...output.matchAll(/https:\/\/[a-zA-Z0-9.-]+\.workers\.dev/g)].map((match) => match[0]);
   const workerUrl = matches.at(-1);
@@ -171,6 +239,15 @@ async function deployWorker() {
   }
 
   return workerUrl;
+}
+
+function cloudflareEnv(extra = {}) {
+  return {
+    ...process.env,
+    CLOUDFLARE_API_TOKEN: config.cloudflareApiToken,
+    CLOUDFLARE_ACCOUNT_ID: config.cloudflareAccountId,
+    ...extra
+  };
 }
 
 async function renderSnippet(decisionUrl) {

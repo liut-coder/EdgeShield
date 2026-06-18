@@ -11,8 +11,20 @@ on:
         description: "KV namespace title, created if missing"
         required: true
         default: "edge-waf-v0-kv"
+      account_id:
+        description: "Optional Cloudflare Account ID; falls back to CLOUDFLARE_ACCOUNT_ID secret or automatic resolution"
+        required: false
+        default: ""
+      account_name:
+        description: "Optional Cloudflare Account name; falls back to CLOUDFLARE_ACCOUNT_NAME secret"
+        required: false
+        default: ""
       zone_id:
-        description: "Cloudflare Zone ID for Snippet deployment; falls back to the CLOUDFLARE_ZONE_ID secret"
+        description: "Optional Cloudflare Zone ID; falls back to CLOUDFLARE_ZONE_ID secret"
+        required: false
+        default: ""
+      zone_name:
+        description: "Optional Cloudflare Zone name, such as example.com; falls back to CLOUDFLARE_ZONE_NAME secret"
         required: false
         default: ""
       snippet_name:
@@ -32,8 +44,10 @@ jobs:
       contents: read
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ inputs.account_id || secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCOUNT_NAME: ${{ inputs.account_name || secrets.CLOUDFLARE_ACCOUNT_NAME }}
       CLOUDFLARE_ZONE_ID: ${{ inputs.zone_id || secrets.CLOUDFLARE_ZONE_ID }}
+      CLOUDFLARE_ZONE_NAME: ${{ inputs.zone_name || secrets.CLOUDFLARE_ZONE_NAME }}
       WORKER_NAME: ${{ inputs.worker_name }}
       KV_NAMESPACE: ${{ inputs.kv_namespace }}
       SNIPPET_NAME: ${{ inputs.snippet_name }}
@@ -54,7 +68,7 @@ jobs:
       - name: Validate project
         run: npm run check
 
-      - name: Validate deploy inputs
+      - name: Validate token
         shell: bash
         run: |
           set -euo pipefail
@@ -64,195 +78,18 @@ jobs:
             exit 1
           fi
 
-          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
-            echo "Missing GitHub secret: CLOUDFLARE_ACCOUNT_ID" >&2
-            exit 1
-          fi
-
-          if [ -z "${CLOUDFLARE_ZONE_ID}" ]; then
-            echo "Missing Cloudflare zone id. Set the CLOUDFLARE_ZONE_ID secret or the zone_id workflow input." >&2
-            exit 1
-          fi
-
-          if [[ ! "${WORKER_NAME}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
-            echo "Invalid worker_name. Use lowercase letters, digits, and hyphens, max 63 chars." >&2
-            exit 1
-          fi
-
-          if [[ ! "${CLOUDFLARE_ZONE_ID}" =~ ^[0-9a-fA-F]{32}$ ]]; then
-            echo "Invalid zone_id. Use the 32-character hex Cloudflare Zone ID." >&2
-            exit 1
-          fi
-
-          if [[ ! "${KV_NAMESPACE}" =~ ^[A-Za-z0-9._:-]{1,128}$ ]]; then
-            echo "Invalid kv_namespace. Use letters, digits, dot, underscore, colon, or hyphen." >&2
-            exit 1
-          fi
-
-          if [[ ! "${SNIPPET_NAME}" =~ ^[a-z0-9_]+$ ]]; then
-            echo "Invalid snippet_name. Use lowercase letters, digits, and underscores." >&2
-            exit 1
-          fi
-
-          if [ -z "${SNIPPET_EXPRESSION}" ]; then
-            echo "Invalid snippet_expression. It must not be empty." >&2
-            exit 1
-          fi
-
-      - name: Create or reuse KV namespace
-        id: kv
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          namespaces="$(npx wrangler kv namespace list)"
-          kv_id="$(NAMESPACES_JSON="${namespaces}" node <<'NODE'
-          const raw = process.env.NAMESPACES_JSON || "";
-          const start = raw.indexOf("[");
-          const end = raw.lastIndexOf("]");
-
-          if (start === -1 || end === -1 || end < start) {
-            process.exit(0);
-          }
-
-          const namespaces = JSON.parse(raw.slice(start, end + 1));
-          const match = namespaces.find((namespace) => namespace.title === process.env.KV_NAMESPACE);
-          process.stdout.write(match?.id || "");
-          NODE
-          )"
-
-          if [ -z "${kv_id}" ]; then
-            create_output="$(npx wrangler kv namespace create "${KV_NAMESPACE}")"
-            echo "${create_output}"
-
-            kv_id="$(CREATE_OUTPUT="${create_output}" node <<'NODE'
-          const raw = process.env.CREATE_OUTPUT || "";
-          const match = raw.match(/id\s*=\s*"([^"]+)"/) || raw.match(/"id"\s*:\s*"([^"]+)"/);
-          process.stdout.write(match?.[1] || "");
-          NODE
-          )"
-          fi
-
-          if [ -z "${kv_id}" ]; then
-            echo "Could not resolve KV namespace id." >&2
-            exit 1
-          fi
-
-          echo "kv_id=${kv_id}" >> "${GITHUB_OUTPUT}"
-
-      - name: Generate Wrangler deploy config
-        shell: bash
-        env:
-          KV_ID: ${{ steps.kv.outputs.kv_id }}
-        run: |
-          set -euo pipefail
-
-          node <<'NODE'
-          const fs = require("fs");
-
-          const workerName = process.env.WORKER_NAME;
-          const kvId = process.env.KV_ID;
-
-          if (!workerName || !kvId) {
-            throw new Error("WORKER_NAME and KV_ID are required");
-          }
-
-          let toml = fs.readFileSync("wrangler.toml", "utf8");
-          toml = toml.replace(/^name\s*=\s*"[^"]*"/m, `name = "${workerName}"`);
-          toml = toml.replace(
-            /kv_namespaces\s*=\s*\[[\s\S]*?\]/m,
-            `kv_namespaces = [\n  { binding = "KV", id = "${kvId}" }\n]`
-          );
-
-          fs.writeFileSync("wrangler.generated.toml", toml);
-          NODE
-
-      - name: Deploy Worker
-        id: deploy_worker
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          set +e
-          deploy_output="$(npx wrangler deploy --config wrangler.generated.toml 2>&1)"
-          deploy_status=$?
-          set -e
-
-          echo "${deploy_output}"
-
-          if [ "${deploy_status}" -ne 0 ]; then
-            exit "${deploy_status}"
-          fi
-
-          worker_url="$(DEPLOY_OUTPUT="${deploy_output}" node <<'NODE'
-          const raw = process.env.DEPLOY_OUTPUT || "";
-          const matches = [...raw.matchAll(/https:\/\/[a-zA-Z0-9.-]+\.workers\.dev/g)].map((match) => match[0]);
-          process.stdout.write(matches.at(-1) || "");
-          NODE
-          )"
-
-          if [ -z "${worker_url}" ]; then
-            echo "Could not find workers.dev URL in Wrangler deploy output." >&2
-            exit 1
-          fi
-
-          echo "worker_url=${worker_url}" >> "${GITHUB_OUTPUT}"
-
-      - name: Render Snippet
-        shell: bash
-        env:
-          WAF_WORKER_DECISION_URL: ${{ steps.deploy_worker.outputs.worker_url }}/__edge-waf/decision
-        run: |
-          set -euo pipefail
-
-          node <<'NODE'
-          const fs = require("fs");
-          const path = require("path");
-
-          const decisionUrl = process.env.WAF_WORKER_DECISION_URL;
-
-          if (!decisionUrl) {
-            throw new Error("WAF_WORKER_DECISION_URL is required");
-          }
-
-          const sourcePath = path.join("snippets", "edge-gate.js");
-          const outputDir = ".generated";
-          const outputPath = path.join(outputDir, "edge-gate.js");
-          const source = fs.readFileSync(sourcePath, "utf8");
-          const rendered = source.replace(
-            /^const WAF_WORKER_URL = .*;$/m,
-            `const WAF_WORKER_URL = ${JSON.stringify(decisionUrl)};`
-          );
-
-          if (rendered === source) {
-            throw new Error("Could not replace WAF_WORKER_URL in snippets/edge-gate.js");
-          }
-
-          fs.mkdirSync(outputDir, { recursive: true });
-          fs.writeFileSync(outputPath, rendered);
-          NODE
-
-      - name: Deploy Snippet
-        env:
-          SNIPPET_FILE: .generated/edge-gate.js
-          SNIPPET_MAIN_MODULE: edge-gate.js
-          SNIPPET_DESCRIPTION: Edge WAF gateway
-        run: node scripts/deploy-snippet.mjs
+      - name: Deploy to Cloudflare
+        run: npm run deploy:all
 
       - name: Deployment summary
-        env:
-          KV_ID: ${{ steps.kv.outputs.kv_id }}
-          WORKER_URL: ${{ steps.deploy_worker.outputs.worker_url }}
         run: |
           {
-            echo "## Edge WAF deployment"
+            echo "## EdgeShield deployment"
             echo ""
             echo "- Worker: \`${WORKER_NAME}\`"
-            echo "- Worker URL: \`${WORKER_URL}\`"
             echo "- KV namespace: \`${KV_NAMESPACE}\`"
-            echo "- KV id: \`${KV_ID}\`"
             echo "- Snippet: \`${SNIPPET_NAME}\`"
             echo "- Snippet expression: \`${SNIPPET_EXPRESSION}\`"
             echo ""
-            echo "The workflow rendered and deployed the Snippet with the Worker decision URL."
+            echo "See the Deploy to Cloudflare step logs for the resolved Account ID, Worker URL, KV id, and Zone details."
           } >> "${GITHUB_STEP_SUMMARY}"

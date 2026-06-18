@@ -34,33 +34,54 @@ EdgeShield 在 Cloudflare 边缘拦截请求：Snippet 负责入口转发，Work
 
 ## 必填配置
 
-部署需要同时操作 Worker、KV、Snippet 和 Zone 规则，所以必须提供 Cloudflare API Token、Account ID 和 Zone 信息。
+部署需要同时操作 Worker、KV、Snippet 和 Zone 规则。为了减少手工复制，脚本会尽量自动解析 Account 和 Zone：
+
+- `CLOUDFLARE_ACCOUNT_ID` 可以不填；如果 token 只关联一个账号，脚本会自动识别。
+- `CLOUDFLARE_ZONE_ID` 可以不填；你可以改填更直观的 `CLOUDFLARE_ZONE_NAME=example.com`。
+- `CLOUDFLARE_API_TOKEN` 不能自动生成，必须在 Cloudflare 页面创建。
 
 ### 最小变量
 
+推荐先用域名方式，少复制一个 Zone ID：
+
 ```text
 CLOUDFLARE_API_TOKEN=你的 Cloudflare API Token
-CLOUDFLARE_ACCOUNT_ID=你的 Account ID
-CLOUDFLARE_ZONE_ID=你的 Zone ID
+CLOUDFLARE_ZONE_NAME=example.com
 SNIPPET_EXPRESSION=(http.host eq "www.example.com")
 ```
 
-### 变量说明
+如果你的 token 能访问多个 Cloudflare 账号，再补一个账号字段：
+
+```text
+CLOUDFLARE_ACCOUNT_ID=你的 Account ID
+```
+
+也可以用账号名：
+
+```text
+CLOUDFLARE_ACCOUNT_NAME=你的 Cloudflare 账号名称
+```
+
+### 可视化获取清单
+
+| 要填什么 | 推荐变量 | 是否必须 | 页面位置 | 备注 |
+| --- | --- | --- | --- | --- |
+| API Token | `CLOUDFLARE_API_TOKEN` | 是 | Cloudflare 右上角头像 -> `My Profile` -> `API Tokens` -> `Create Token` | 创建后只显示一次，立即复制保存 |
+| 站点域名 | `CLOUDFLARE_ZONE_NAME` | 是 | Cloudflare 首页站点列表，例如 `example.com` | 比 Zone ID 更直观；需要 token 有 `Zone:Read` |
+| 保护范围 | `SNIPPET_EXPRESSION` | 强烈建议 | 按自己的域名填写 | 不建议用默认 `true` |
+| Account ID | `CLOUDFLARE_ACCOUNT_ID` | 多账号时需要 | Cloudflare Account 首页右侧栏 | 单账号 token 可自动识别 |
+| Zone ID | `CLOUDFLARE_ZONE_ID` | 可替代域名 | 进入目标站点后右侧栏 `Zone ID` | 不想给 `Zone:Read` 时可直接填 Zone ID |
+
+### 完整变量说明
 
 | 变量 | 必填 | 示例 | 用途 | 获取位置 |
 | --- | --- | --- | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | 是 | `***` | 调用 Cloudflare API 完成部署 | Dashboard -> My Profile -> API Tokens |
-| `CLOUDFLARE_ACCOUNT_ID` | 是 | `0123456789abcdef0123456789abcdef` | 指定部署账号 | Cloudflare 账号首页右侧栏 |
-| `CLOUDFLARE_ZONE_ID` | 是 | `abcdef0123456789abcdef0123456789` | 指定 Snippet Rule 挂载的站点 | 进入目标站点后右侧栏 `Zone ID` |
+| `CLOUDFLARE_ZONE_NAME` | 推荐 | `example.com` | 自动解析 Zone ID | Cloudflare 站点列表 |
+| `CLOUDFLARE_ZONE_ID` | 二选一 | `abcdef0123456789abcdef0123456789` | 指定 Snippet Rule 挂载的站点 | 进入目标站点后右侧栏 `Zone ID` |
+| `CLOUDFLARE_ACCOUNT_ID` | 多账号时需要 | `0123456789abcdef0123456789abcdef` | 指定部署账号 | Cloudflare 账号首页右侧栏 |
+| `CLOUDFLARE_ACCOUNT_NAME` | 可替代 Account ID | `My Account` | 自动解析 Account ID | Cloudflare Account 名称 |
 | `SNIPPET_EXPRESSION` | 建议填写 | `(http.host eq "www.example.com")` | 限定哪些请求进入 WAF | 按需要填写 Cloudflare Rules 表达式 |
-
-如果不方便填写 `CLOUDFLARE_ZONE_ID`，可以改用：
-
-```text
-CLOUDFLARE_ZONE_NAME=example.com
-```
-
-使用 `CLOUDFLARE_ZONE_NAME` 时，脚本会自动查询 Zone ID，但 API Token 需要额外的 `Zone:Read` 权限。
 
 ### API Token 权限
 
@@ -70,7 +91,7 @@ CLOUDFLARE_ZONE_NAME=example.com
 | Account | `Workers KV Storage:Edit` | 创建或复用 KV namespace |
 | Account | `Account Settings:Read` | Wrangler 读取账号信息 |
 | Zone | `Snippets:Edit` | 创建 Snippet 和 Snippet Rule |
-| Zone | `Zone:Read` | 仅在使用 `CLOUDFLARE_ZONE_NAME` 时需要 |
+| Zone | `Zone:Read` | 用域名自动解析 Zone ID，或用脚本自动识别 Zone |
 
 建议把 Token 的资源范围限制到当前 Account 和目标 Zone。
 
@@ -137,10 +158,15 @@ npm run deploy:all
 
 ```powershell
 $env:CLOUDFLARE_API_TOKEN="你的 token"
-$env:CLOUDFLARE_ACCOUNT_ID="你的 account id"
-$env:CLOUDFLARE_ZONE_ID="你的 zone id"
+$env:CLOUDFLARE_ZONE_NAME="example.com"
 $env:SNIPPET_EXPRESSION='(http.host eq "www.example.com")'
 npm run deploy:all
+```
+
+如果 token 能访问多个 Cloudflare 账号，再补充：
+
+```powershell
+$env:CLOUDFLARE_ACCOUNT_ID="你的 account id"
 ```
 
 ## GitHub Actions 部署
@@ -154,9 +180,11 @@ npm run deploy:all
 使用步骤：
 
 1. 进入 GitHub 仓库 `Settings -> Secrets and variables -> Actions`。
-2. 添加 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_ZONE_ID`。
-3. 进入 `Actions -> Deploy to Cloudflare -> Run workflow`。
-4. 按需覆盖 `worker_name`、`kv_namespace`、`snippet_name`、`snippet_expression`。
+2. 添加 `CLOUDFLARE_API_TOKEN`。
+3. 添加 `CLOUDFLARE_ZONE_NAME`，例如 `example.com`；也可以改填 `CLOUDFLARE_ZONE_ID`。
+4. 如果 token 能访问多个 Cloudflare 账号，添加 `CLOUDFLARE_ACCOUNT_ID` 或 `CLOUDFLARE_ACCOUNT_NAME`。
+5. 进入 `Actions -> Deploy to Cloudflare -> Run workflow`。
+6. 按需覆盖 `worker_name`、`kv_namespace`、`snippet_name`、`snippet_expression`。
 
 ## 常见问题
 
