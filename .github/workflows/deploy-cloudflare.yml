@@ -27,14 +27,22 @@ on:
         description: "Optional Cloudflare Zone name, such as example.com; falls back to CLOUDFLARE_ZONE_NAME secret"
         required: false
         default: ""
+      protected_hostname:
+        description: "Hostname to protect, such as www.example.com; falls back to PROTECTED_HOSTNAME secret"
+        required: false
+        default: ""
+      protected_path_prefix:
+        description: "Optional path prefix to protect, such as /login; falls back to PROTECTED_PATH_PREFIX secret"
+        required: false
+        default: ""
       snippet_name:
         description: "Cloudflare Snippet name; lowercase letters, digits, and underscores only"
         required: true
         default: "edge_waf_gate"
       snippet_expression:
-        description: "Cloudflare rule expression that runs the Snippet"
-        required: true
-        default: "true"
+        description: "Optional Cloudflare rule expression; overrides protected_hostname when set"
+        required: false
+        default: ""
 
 jobs:
   deploy:
@@ -48,6 +56,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_NAME: ${{ inputs.account_name || secrets.CLOUDFLARE_ACCOUNT_NAME }}
       CLOUDFLARE_ZONE_ID: ${{ inputs.zone_id || secrets.CLOUDFLARE_ZONE_ID }}
       CLOUDFLARE_ZONE_NAME: ${{ inputs.zone_name || secrets.CLOUDFLARE_ZONE_NAME }}
+      PROTECTED_HOSTNAME: ${{ inputs.protected_hostname || secrets.PROTECTED_HOSTNAME }}
+      PROTECTED_PATH_PREFIX: ${{ inputs.protected_path_prefix || secrets.PROTECTED_PATH_PREFIX }}
       WORKER_NAME: ${{ inputs.worker_name }}
       KV_NAMESPACE: ${{ inputs.kv_namespace }}
       SNIPPET_NAME: ${{ inputs.snippet_name }}
@@ -89,7 +99,8 @@ jobs:
             echo "- Worker: \`${WORKER_NAME}\`"
             echo "- KV namespace: \`${KV_NAMESPACE}\`"
             echo "- Snippet: \`${SNIPPET_NAME}\`"
-            echo "- Snippet expression: \`${SNIPPET_EXPRESSION}\`"
+            echo "- Protected hostname: \`${PROTECTED_HOSTNAME}\`"
+            echo "- Snippet expression: \`${SNIPPET_EXPRESSION:-auto from PROTECTED_HOSTNAME}\`"
             echo ""
             echo "See the Deploy to Cloudflare step logs for the resolved Account ID, Worker URL, KV id, and Zone details."
           } >> "${GITHUB_STEP_SUMMARY}"

@@ -5,15 +5,19 @@ import { spawn } from "node:child_process";
 const DEFAULTS = {
   workerName: "edge-waf-v0-1",
   kvNamespace: "edge-waf-v0-kv",
-  snippetName: "edge_waf_gate",
-  snippetExpression: "true"
+  snippetName: "edge_waf_gate"
 };
+
+const protectedHostname = firstEnv("PROTECTED_HOSTNAME", "HOSTNAME");
+const protectedPathPrefix = firstEnv("PROTECTED_PATH_PREFIX", "PATH_PREFIX");
 
 const config = {
   workerName: process.env.WORKER_NAME || DEFAULTS.workerName,
   kvNamespace: process.env.KV_NAMESPACE || DEFAULTS.kvNamespace,
   snippetName: process.env.SNIPPET_NAME || DEFAULTS.snippetName,
-  snippetExpression: process.env.SNIPPET_EXPRESSION || DEFAULTS.snippetExpression,
+  snippetExpression: process.env.SNIPPET_EXPRESSION || buildSnippetExpression(protectedHostname, protectedPathPrefix),
+  protectedHostname,
+  protectedPathPrefix,
   cloudflareAccountId: firstEnv("CLOUDFLARE_ACCOUNT_ID", "ACCOUNT_ID", "CF_ACCOUNT_ID"),
   cloudflareAccountName: firstEnv("CLOUDFLARE_ACCOUNT_NAME", "ACCOUNT_NAME"),
   cloudflareApiToken: requiredEnv("CLOUDFLARE_API_TOKEN"),
@@ -63,11 +67,27 @@ function firstEnv(...names) {
   return "";
 }
 
+function buildSnippetExpression(hostname, pathPrefix) {
+  if (!hostname) {
+    return "";
+  }
+
+  const hostExpression = `(http.host eq "${hostname}")`;
+
+  if (!pathPrefix) {
+    return hostExpression;
+  }
+
+  return `(${hostExpression} and starts_with(http.request.uri.path, "${pathPrefix}"))`;
+}
+
 function validateConfig({
   workerName,
   kvNamespace,
   snippetName,
   snippetExpression,
+  protectedHostname,
+  protectedPathPrefix,
   cloudflareAccountId,
   cloudflareAccountName,
   cloudflareZoneId,
@@ -86,7 +106,15 @@ function validateConfig({
   }
 
   if (!snippetExpression.trim()) {
-    throw new Error("SNIPPET_EXPRESSION must not be empty");
+    throw new Error("Set PROTECTED_HOSTNAME or SNIPPET_EXPRESSION so the Snippet rule has a protection scope");
+  }
+
+  if (protectedHostname && !/^[A-Za-z0-9.-]+$/.test(protectedHostname)) {
+    throw new Error("PROTECTED_HOSTNAME must be a hostname such as www.example.com");
+  }
+
+  if (protectedPathPrefix && !/^\/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$/.test(protectedPathPrefix)) {
+    throw new Error("PROTECTED_PATH_PREFIX must start with / and must not contain quotes or spaces");
   }
 
   if (cloudflareAccountId && !/^[0-9a-f]{32}$/i.test(cloudflareAccountId)) {
@@ -101,9 +129,9 @@ function validateConfig({
     throw new Error("CLOUDFLARE_ZONE_ID must be a 32-character hex zone id");
   }
 
-  if (!cloudflareZoneId && !cloudflareZoneName) {
+  if (!cloudflareZoneId && !cloudflareZoneName && !protectedHostname) {
     throw new Error(
-      "A Cloudflare zone is required for Snippet deployment. Set CLOUDFLARE_ZONE_ID, or set CLOUDFLARE_ZONE_NAME to resolve it automatically."
+      "A Cloudflare zone is required for Snippet deployment. Set PROTECTED_HOSTNAME, CLOUDFLARE_ZONE_NAME, or CLOUDFLARE_ZONE_ID."
     );
   }
 
@@ -162,6 +190,14 @@ async function resolveZoneId({ cloudflareZoneId, cloudflareZoneName, cloudflareA
     return cloudflareZoneId;
   }
 
+  if (!cloudflareZoneName && config.protectedHostname) {
+    return await resolveZoneIdFromHostname({
+      protectedHostname: config.protectedHostname,
+      cloudflareAccountId,
+      cloudflareApiToken
+    });
+  }
+
   const params = new URLSearchParams({
     name: cloudflareZoneName,
     "account.id": cloudflareAccountId,
@@ -187,6 +223,41 @@ async function resolveZoneId({ cloudflareZoneId, cloudflareZoneName, cloudflareA
   }
 
   return zoneId;
+}
+
+async function resolveZoneIdFromHostname({ protectedHostname, cloudflareAccountId, cloudflareApiToken }) {
+  const params = new URLSearchParams({
+    "account.id": cloudflareAccountId,
+    per_page: "50"
+  });
+  const response = await fetch(`https://api.cloudflare.com/client/v4/zones?${params}`, {
+    headers: {
+      authorization: `Bearer ${cloudflareApiToken}`,
+      accept: "application/json"
+    }
+  });
+  const text = await response.text();
+  const body = parseJson(text);
+
+  if (!response.ok || body?.success === false) {
+    throw new Error(`Could not list Cloudflare zones: ${formatApiError(body, text)}`);
+  }
+
+  const hostname = protectedHostname.toLowerCase();
+  const zones = Array.isArray(body?.result) ? body.result : [];
+  const matches = zones
+    .filter((zone) => hostname === zone.name || hostname.endsWith(`.${zone.name}`))
+    .sort((a, b) => b.name.length - a.name.length);
+  const match = matches[0];
+
+  if (!match?.id) {
+    throw new Error(
+      `Could not find a Cloudflare zone matching PROTECTED_HOSTNAME=${protectedHostname}. Set CLOUDFLARE_ZONE_ID or CLOUDFLARE_ZONE_NAME explicitly.`
+    );
+  }
+
+  console.log(`Resolved zone ${match.name} from PROTECTED_HOSTNAME=${protectedHostname}`);
+  return match.id;
 }
 
 async function createOrReuseKvNamespace(namespaceTitle) {

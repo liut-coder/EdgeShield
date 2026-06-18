@@ -37,16 +37,21 @@ EdgeShield 在 Cloudflare 边缘拦截请求：Snippet 负责入口转发，Work
 部署需要同时操作 Worker、KV、Snippet 和 Zone 规则。为了减少手工复制，脚本会尽量自动解析 Account 和 Zone：
 
 - `CLOUDFLARE_ACCOUNT_ID` 可以不填；如果 token 只关联一个账号，脚本会自动识别。
-- `CLOUDFLARE_ZONE_ID` 可以不填；你可以改填更直观的 `CLOUDFLARE_ZONE_NAME=example.com`。
+- `CLOUDFLARE_ZONE_ID` 可以不填；推荐填更直观的 `PROTECTED_HOSTNAME=www.example.com`，脚本会从 Cloudflare Zone 列表自动匹配。
 - `CLOUDFLARE_API_TOKEN` 不能自动生成，必须在 Cloudflare 页面创建。
 
 ### 最小变量
 
-推荐先用域名方式，少复制一个 Zone ID：
+推荐只填 token 和要保护的域名：
 
 ```text
 CLOUDFLARE_API_TOKEN=你的 Cloudflare API Token
-CLOUDFLARE_ZONE_NAME=example.com
+PROTECTED_HOSTNAME=www.example.com
+```
+
+脚本会自动生成：
+
+```text
 SNIPPET_EXPRESSION=(http.host eq "www.example.com")
 ```
 
@@ -67,8 +72,9 @@ CLOUDFLARE_ACCOUNT_NAME=你的 Cloudflare 账号名称
 | 要填什么 | 推荐变量 | 是否必须 | 页面位置 | 备注 |
 | --- | --- | --- | --- | --- |
 | API Token | `CLOUDFLARE_API_TOKEN` | 是 | Cloudflare 右上角头像 -> `My Profile` -> `API Tokens` -> `Create Token` | 创建后只显示一次，立即复制保存 |
-| 站点域名 | `CLOUDFLARE_ZONE_NAME` | 是 | Cloudflare 首页站点列表，例如 `example.com` | 比 Zone ID 更直观；需要 token 有 `Zone:Read` |
-| 保护范围 | `SNIPPET_EXPRESSION` | 强烈建议 | 按自己的域名填写 | 不建议用默认 `true` |
+| 要保护的域名 | `PROTECTED_HOSTNAME` | 是 | 浏览器地址栏或 Cloudflare 站点域名，例如 `www.example.com` | 脚本会自动匹配所属 Zone，并生成 Snippet 表达式 |
+| 保护路径 | `PROTECTED_PATH_PREFIX` | 否 | 自行填写，例如 `/login` | 只保护某个路径前缀 |
+| 自定义保护范围 | `SNIPPET_EXPRESSION` | 否 | 自行填写 Cloudflare Rules 表达式 | 设置后会覆盖 `PROTECTED_HOSTNAME` 自动表达式 |
 | Account ID | `CLOUDFLARE_ACCOUNT_ID` | 多账号时需要 | Cloudflare Account 首页右侧栏 | 单账号 token 可自动识别 |
 | Zone ID | `CLOUDFLARE_ZONE_ID` | 可替代域名 | 进入目标站点后右侧栏 `Zone ID` | 不想给 `Zone:Read` 时可直接填 Zone ID |
 
@@ -77,6 +83,8 @@ CLOUDFLARE_ACCOUNT_NAME=你的 Cloudflare 账号名称
 | 变量 | 必填 | 示例 | 用途 | 获取位置 |
 | --- | --- | --- | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | 是 | `***` | 调用 Cloudflare API 完成部署 | Dashboard -> My Profile -> API Tokens |
+| `PROTECTED_HOSTNAME` | 推荐 | `www.example.com` | 自动生成保护表达式并匹配 Zone | 浏览器地址栏或 Cloudflare 站点域名 |
+| `PROTECTED_PATH_PREFIX` | 否 | `/login` | 限定保护路径前缀 | 自行填写 |
 | `CLOUDFLARE_ZONE_NAME` | 推荐 | `example.com` | 自动解析 Zone ID | Cloudflare 站点列表 |
 | `CLOUDFLARE_ZONE_ID` | 二选一 | `abcdef0123456789abcdef0123456789` | 指定 Snippet Rule 挂载的站点 | 进入目标站点后右侧栏 `Zone ID` |
 | `CLOUDFLARE_ACCOUNT_ID` | 多账号时需要 | `0123456789abcdef0123456789abcdef` | 指定部署账号 | Cloudflare 账号首页右侧栏 |
@@ -97,7 +105,7 @@ CLOUDFLARE_ACCOUNT_NAME=你的 Cloudflare 账号名称
 
 ## 保护范围
 
-`SNIPPET_EXPRESSION` 决定哪些请求会先经过 EdgeShield。第一次部署不建议使用默认值 `true`，因为它会让整个 Zone 都执行 Snippet。
+`PROTECTED_HOSTNAME` 会自动生成最常用的保护表达式。如果你需要更细的范围，再直接设置 `SNIPPET_EXPRESSION`。
 
 常用表达式：
 
@@ -158,8 +166,7 @@ npm run deploy:all
 
 ```powershell
 $env:CLOUDFLARE_API_TOKEN="你的 token"
-$env:CLOUDFLARE_ZONE_NAME="example.com"
-$env:SNIPPET_EXPRESSION='(http.host eq "www.example.com")'
+$env:PROTECTED_HOSTNAME="www.example.com"
 npm run deploy:all
 ```
 
@@ -181,7 +188,7 @@ $env:CLOUDFLARE_ACCOUNT_ID="你的 account id"
 
 1. 进入 GitHub 仓库 `Settings -> Secrets and variables -> Actions`。
 2. 添加 `CLOUDFLARE_API_TOKEN`。
-3. 添加 `CLOUDFLARE_ZONE_NAME`，例如 `example.com`；也可以改填 `CLOUDFLARE_ZONE_ID`。
+3. 添加 `PROTECTED_HOSTNAME`，例如 `www.example.com`；也可以改填 `CLOUDFLARE_ZONE_NAME` 或 `CLOUDFLARE_ZONE_ID`。
 4. 如果 token 能访问多个 Cloudflare 账号，添加 `CLOUDFLARE_ACCOUNT_ID` 或 `CLOUDFLARE_ACCOUNT_NAME`。
 5. 进入 `Actions -> Deploy to Cloudflare -> Run workflow`。
 6. 按需覆盖 `worker_name`、`kv_namespace`、`snippet_name`、`snippet_expression`。
@@ -198,12 +205,11 @@ Error: A Cloudflare zone is required for Snippet deployment.
 
 处理方式：
 
-1. 打开 Cloudflare 目标站点。
-2. 在右侧栏复制 `Zone ID`。
-3. 在 Cloudflare Workers & Pages 项目的变量或 Secret 中添加 `CLOUDFLARE_ZONE_ID`。
-4. 重新部署。
+1. 在 Cloudflare Workers & Pages 项目的变量或 Secret 中添加 `PROTECTED_HOSTNAME`，例如 `www.example.com`。
+2. 确认 API Token 有 `Zone:Read` 权限。
+3. 重新部署。
 
-也可以设置 `CLOUDFLARE_ZONE_NAME=example.com`，但 Token 需要 `Zone:Read` 权限。
+也可以直接设置 `CLOUDFLARE_ZONE_ID`，这样不需要脚本自动匹配 Zone。
 
 ### Snippet 影响范围过大
 
