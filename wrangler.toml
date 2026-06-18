@@ -1,0 +1,8 @@
+name = "edge-waf-v0-1"
+main = "worker/index.js"
+compatibility_date = "2026-06-19"
+workers_dev = true
+
+kv_namespaces = [
+  { binding = "KV", id = "YOUR_KV_ID" }
+]

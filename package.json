@@ -1,0 +1,15 @@
+{
+  "name": "edge-waf-v0.1",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Lightweight edge WAF MVP built on Cloudflare Snippets + Workers.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "node --check worker/index.js && node --check worker/scoring.js && node --check worker/challenge.js && node --check worker/utils.js && node --check snippets/edge-gate.js && node --check public/check.js && node --check scripts/deploy-snippet.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
