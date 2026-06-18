@@ -20,7 +20,7 @@ const config = {
   protectedPathPrefix,
   cloudflareAccountId: firstEnv("CLOUDFLARE_ACCOUNT_ID", "ACCOUNT_ID", "CF_ACCOUNT_ID"),
   cloudflareAccountName: firstEnv("CLOUDFLARE_ACCOUNT_NAME", "ACCOUNT_NAME"),
-  cloudflareApiToken: requiredEnv("CLOUDFLARE_API_TOKEN"),
+  cloudflareApiToken: firstEnv("CLOUDFLARE_API_TOKEN"),
   cloudflareZoneId: firstEnv(
     "CLOUDFLARE_ZONE_ID",
     "CLOUDFLARE_ZONEID",
@@ -33,7 +33,17 @@ const config = {
   cloudflareZoneName: firstEnv("CLOUDFLARE_ZONE_NAME", "ZONE_NAME")
 };
 
+if (!config.snippetExpression.trim()) {
+  validateWorkerOnlyConfig(config);
+  await deployWorkerOnly();
+  console.log("");
+  console.log("Worker deployed in runtime variable mode.");
+  console.log("Next step: call POST /__edge-waf/install with x-install-token after runtime variables are configured.");
+  process.exit(0);
+}
+
 validateConfig(config);
+config.cloudflareApiToken = requiredValue(config.cloudflareApiToken, "CLOUDFLARE_API_TOKEN");
 config.cloudflareAccountId = await resolveAccountId(config);
 config.cloudflareZoneId = await resolveZoneId(config);
 
@@ -53,9 +63,7 @@ console.log(`KV id: ${kvId}`);
 console.log(`Snippet: ${config.snippetName}`);
 console.log(`Snippet expression: ${config.snippetExpression}`);
 
-function requiredEnv(name) {
-  const value = process.env[name]?.trim();
-
+function requiredValue(value, name) {
   if (!value) {
     throw new Error(`${name} is required`);
   }
@@ -101,29 +109,17 @@ function validateConfig({
   cloudflareZoneId,
   cloudflareZoneName
 }) {
-  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(workerName)) {
-    throw new Error("WORKER_NAME must use lowercase letters, digits, and hyphens, max 63 chars");
-  }
+  validateWorkerOnlyConfig({ workerName, kvNamespace, snippetName });
 
-  if (!/^[A-Za-z0-9._:-]{1,128}$/.test(kvNamespace)) {
-    throw new Error("KV_NAMESPACE must use letters, digits, dot, underscore, colon, or hyphen");
-  }
-
-  if (!/^[a-z0-9_]+$/.test(snippetName)) {
-    throw new Error("SNIPPET_NAME must use lowercase letters, digits, and underscores");
+  if (!cloudflareApiToken) {
+    throw new Error("CLOUDFLARE_API_TOKEN is required for build-time Snippet deployment");
   }
 
   if (!snippetExpression.trim()) {
     throw new Error("Set PROTECTED_HOSTNAME or SNIPPET_EXPRESSION so the Snippet rule has a protection scope");
   }
 
-  if (protectedHostname && !/^[A-Za-z0-9.-]+$/.test(protectedHostname)) {
-    throw new Error("PROTECTED_HOSTNAME must be a hostname such as www.example.com");
-  }
-
-  if (protectedPathPrefix && !/^\/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$/.test(protectedPathPrefix)) {
-    throw new Error("PROTECTED_PATH_PREFIX must start with / and must not contain quotes or spaces");
-  }
+  validateProtectionConfig({ protectedHostname, protectedPathPrefix });
 
   if (cloudflareAccountId && !/^[0-9a-f]{32}$/i.test(cloudflareAccountId)) {
     throw new Error("CLOUDFLARE_ACCOUNT_ID must be a 32-character hex account id");
@@ -146,6 +142,30 @@ function validateConfig({
 
   if (cloudflareZoneName && !/^[A-Za-z0-9.-]+$/.test(cloudflareZoneName)) {
     throw new Error("CLOUDFLARE_ZONE_NAME must be a domain name such as example.com");
+  }
+}
+
+function validateWorkerOnlyConfig({ workerName, kvNamespace, snippetName }) {
+  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(workerName)) {
+    throw new Error("WORKER_NAME must use lowercase letters, digits, and hyphens, max 63 chars");
+  }
+
+  if (!/^[A-Za-z0-9._:-]{1,128}$/.test(kvNamespace)) {
+    throw new Error("KV_NAMESPACE must use letters, digits, dot, underscore, colon, or hyphen");
+  }
+
+  if (!/^[a-z0-9_]+$/.test(snippetName)) {
+    throw new Error("SNIPPET_NAME must use lowercase letters, digits, and underscores");
+  }
+}
+
+function validateProtectionConfig({ protectedHostname, protectedPathPrefix }) {
+  if (protectedHostname && !/^[A-Za-z0-9.-]+$/.test(protectedHostname)) {
+    throw new Error("PROTECTED_HOSTNAME must be a hostname such as www.example.com");
+  }
+
+  if (protectedPathPrefix && !/^\/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$/.test(protectedPathPrefix)) {
+    throw new Error("PROTECTED_PATH_PREFIX must start with / and must not contain quotes or spaces");
   }
 }
 
@@ -329,6 +349,10 @@ async function deployWorker() {
   }
 
   return workerUrl;
+}
+
+async function deployWorkerOnly() {
+  await run(npxBin(), ["wrangler", "deploy", "--config", "wrangler.toml"]);
 }
 
 function cloudflareEnv(extra = {}) {

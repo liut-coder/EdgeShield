@@ -30,6 +30,8 @@ EdgeShield 在 Cloudflare 边缘拦截请求：Snippet 负责入口转发，Work
 | Build command | `npm run check` |
 | Deploy command | `npm run deploy` |
 
+如果你之前已经填了 `npm run deploy:all`，也可以继续用。缺少构建期保护范围时，它会自动退回为只部署 Worker，后续仍通过运行时安装接口创建 Snippet。
+
 4. 在“为运行时使用的 Worker 定义环境变量和机密”中添加下面的运行时变量。
 5. 保存并部署 Worker。
 6. 部署完成后，请求安装接口安装 Snippet。
