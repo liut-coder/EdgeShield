@@ -16,10 +16,12 @@ const config = {
   snippetExpression: process.env.SNIPPET_EXPRESSION || DEFAULTS.snippetExpression,
   cloudflareAccountId: requiredEnv("CLOUDFLARE_ACCOUNT_ID"),
   cloudflareApiToken: requiredEnv("CLOUDFLARE_API_TOKEN"),
-  cloudflareZoneId: requiredEnv("CLOUDFLARE_ZONE_ID")
+  cloudflareZoneId: firstEnv("CLOUDFLARE_ZONE_ID", "ZONE_ID", "CF_ZONE_ID"),
+  cloudflareZoneName: firstEnv("CLOUDFLARE_ZONE_NAME", "ZONE_NAME")
 };
 
 validateConfig(config);
+config.cloudflareZoneId = await resolveZoneId(config);
 
 const kvId = await createOrReuseKvNamespace(config.kvNamespace);
 await generateWranglerConfig({ workerName: config.workerName, kvId });
@@ -46,7 +48,19 @@ function requiredEnv(name) {
   return value;
 }
 
-function validateConfig({ workerName, kvNamespace, snippetName, snippetExpression, cloudflareZoneId }) {
+function firstEnv(...names) {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function validateConfig({ workerName, kvNamespace, snippetName, snippetExpression, cloudflareZoneId, cloudflareZoneName }) {
   if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(workerName)) {
     throw new Error("WORKER_NAME must use lowercase letters, digits, and hyphens, max 63 chars");
   }
@@ -63,9 +77,51 @@ function validateConfig({ workerName, kvNamespace, snippetName, snippetExpressio
     throw new Error("SNIPPET_EXPRESSION must not be empty");
   }
 
-  if (!/^[0-9a-f]{32}$/i.test(cloudflareZoneId)) {
+  if (cloudflareZoneId && !/^[0-9a-f]{32}$/i.test(cloudflareZoneId)) {
     throw new Error("CLOUDFLARE_ZONE_ID must be a 32-character hex zone id");
   }
+
+  if (!cloudflareZoneId && !cloudflareZoneName) {
+    throw new Error(
+      "A Cloudflare zone is required for Snippet deployment. Set CLOUDFLARE_ZONE_ID, or set CLOUDFLARE_ZONE_NAME to resolve it automatically."
+    );
+  }
+
+  if (cloudflareZoneName && !/^[A-Za-z0-9.-]+$/.test(cloudflareZoneName)) {
+    throw new Error("CLOUDFLARE_ZONE_NAME must be a domain name such as example.com");
+  }
+}
+
+async function resolveZoneId({ cloudflareZoneId, cloudflareZoneName, cloudflareAccountId, cloudflareApiToken }) {
+  if (cloudflareZoneId) {
+    return cloudflareZoneId;
+  }
+
+  const params = new URLSearchParams({
+    name: cloudflareZoneName,
+    "account.id": cloudflareAccountId,
+    per_page: "1"
+  });
+  const response = await fetch(`https://api.cloudflare.com/client/v4/zones?${params}`, {
+    headers: {
+      authorization: `Bearer ${cloudflareApiToken}`,
+      accept: "application/json"
+    }
+  });
+  const text = await response.text();
+  const body = parseJson(text);
+
+  if (!response.ok || body?.success === false) {
+    throw new Error(`Could not resolve Cloudflare zone ${cloudflareZoneName}: ${formatApiError(body, text)}`);
+  }
+
+  const zoneId = body?.result?.[0]?.id;
+
+  if (!zoneId) {
+    throw new Error(`Cloudflare zone not found: ${cloudflareZoneName}`);
+  }
+
+  return zoneId;
 }
 
 async function createOrReuseKvNamespace(namespaceTitle) {
@@ -164,6 +220,28 @@ function parseWranglerJsonArray(output) {
 function parseKvId(output) {
   const match = output.match(/id\s*=\s*"([^"]+)"/) || output.match(/"id"\s*:\s*"([^"]+)"/);
   return match?.[1] || "";
+}
+
+function parseJson(text) {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function formatApiError(body, fallback) {
+  if (Array.isArray(body?.errors) && body.errors.length > 0) {
+    return body.errors
+      .map((error) => `${error.code || "error"} ${error.message || ""}`.trim())
+      .join("; ");
+  }
+
+  return fallback || "empty response";
 }
 
 async function run(command, args, { capture = false, env = process.env } = {}) {
