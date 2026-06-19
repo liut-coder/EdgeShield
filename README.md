@@ -34,9 +34,10 @@ EdgeShield 在 Cloudflare 边缘拦截请求：Snippet 负责入口转发，Work
 
 4. 在“为运行时使用的 Worker 定义环境变量和机密”中添加下面的运行时变量。
 5. 保存并部署 Worker。
-6. 部署完成后，请求安装接口安装 Snippet。
+6. 部署完成后打开 Worker 地址，例如 `https://你的-worker.workers.dev/`。
+7. 在控制台输入 `INSTALL_TOKEN`，点击安装 Snippet。
 
-安装接口：
+也可以直接请求安装接口：
 
 ```bash
 curl -X POST "https://你的-worker.workers.dev/__edge-waf/install" \
@@ -226,6 +227,7 @@ Error: A Cloudflare zone is required for Snippet deployment.
 | `worker/index.js` | Worker 决策入口，返回 `allow`、`challenge` 或 `block` |
 | `worker/scoring.js` | MVP 规则打分 |
 | `worker/challenge.js` | 生成挑战页和内联检查脚本 |
+| `worker/dashboard.js` | Web 控制台页面和状态接口 |
 | `worker/installer.js` | 运行时 Snippet 安装接口 |
 | `worker/utils.js` | 输入解析、JSON 响应、Cookie 和 token 工具 |
 | `scripts/deploy-cloudflare.mjs` | 完整部署编排 |

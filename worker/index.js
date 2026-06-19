@@ -1,4 +1,5 @@
 import { challengeHtml, checkScript } from "./challenge.js";
+import { dashboardHtml, statusResponse } from "./dashboard.js";
 import { installSnippet } from "./installer.js";
 import { scoreRequest } from "./scoring.js";
 import {
@@ -13,6 +14,19 @@ const DECISION_PATH = "/__edge-waf/decision";
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (request.method === "GET" && url.pathname === "/") {
+      return new Response(dashboardHtml(request, env), {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store"
+        }
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/__edge-waf/status") {
+      return statusResponse(request, env);
+    }
 
     if (request.method === "GET" && url.pathname === "/check.js") {
       return new Response(checkScript(), {
