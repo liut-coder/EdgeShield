@@ -1,5 +1,6 @@
 const USERS_TABLE = "edge_waf_users";
 const SESSIONS_TABLE = "edge_waf_sessions";
+const CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4";
 const SESSION_COOKIE = "edge_waf_session";
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const PBKDF2_ITERATIONS = 100000;
@@ -23,14 +24,12 @@ export async function getAuthState(request, env) {
 }
 
 export async function setupAdminResponse(request, env) {
-  const auth = request.headers.get("x-api-token") || "";
-
-  if (!env.CLOUDFLARE_API_TOKEN || auth !== env.CLOUDFLARE_API_TOKEN) {
-    return jsonResponse({ error: "unauthorized" }, 401);
-  }
-
   if (!env.DB) {
     return jsonResponse({ error: "D1 binding DB is required" }, 400);
+  }
+
+  if (!await isSetupAuthorized(request, env)) {
+    return jsonResponse({ error: "unauthorized" }, 401);
   }
 
   await ensureAuthSchema(env.DB);
@@ -54,6 +53,26 @@ export async function setupAdminResponse(request, env) {
     .run();
 
   return jsonResponse({ ok: true });
+}
+
+export async function isSetupAuthorized(request, env) {
+  const token = request.headers.get("x-api-token") || "";
+
+  if (env.CLOUDFLARE_API_TOKEN && token === env.CLOUDFLARE_API_TOKEN) {
+    return true;
+  }
+
+  if (!env.DB || !token) {
+    return false;
+  }
+
+  await ensureAuthSchema(env.DB);
+
+  if (await hasUsers(env.DB)) {
+    return false;
+  }
+
+  return await verifyCloudflareApiToken(token);
 }
 
 export async function loginResponse(request, env) {
@@ -233,6 +252,18 @@ function readCookie(request, name) {
 
 function serializeSessionCookie(sessionId, maxAge) {
   return `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+export async function verifyCloudflareApiToken(token) {
+  const response = await fetch(`${CLOUDFLARE_API_BASE}/user/tokens/verify`, {
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: "application/json"
+    }
+  });
+  const body = await response.json().catch(() => null);
+
+  return response.ok && body?.success === true;
 }
 
 function randomToken() {

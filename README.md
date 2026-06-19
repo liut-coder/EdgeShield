@@ -73,6 +73,8 @@ Token 权限：
 
 安装成功后自动进入工作台。之后刷新首页会先显示登录页。
 
+如果安装时提示 `CLOUDFLARE_API_TOKEN is not configured`，打开 [Cloudflare Workers & Pages](https://dash.cloudflare.com/?to=/:account/workers-and-pages)，进入当前 Worker，在 `Settings -> Variables and Secrets` 的运行时变量和密钥里添加 `CLOUDFLARE_API_TOKEN`，然后重新部署或等待环境刷新。
+
 ## 工作台
 
 工作台显示：

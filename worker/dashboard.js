@@ -410,6 +410,111 @@ export async function dashboardHtml(request, env) {
       font-size: 15px;
     }
 
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgb(15 23 42 / 42%);
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal {
+      width: min(520px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 24px 70px rgb(15 23 42 / 24%);
+    }
+
+    .modal-head,
+    .modal-body,
+    .modal-actions {
+      padding: 16px;
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .modal-head h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    .modal-body {
+      display: grid;
+      gap: 12px;
+    }
+
+    .modal-body p {
+      margin: 0;
+    }
+
+    .modal-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .modal-list li {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: 9px;
+      align-items: start;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .modal-list strong {
+      color: var(--text);
+    }
+
+    .modal-step {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border-radius: 7px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .icon-btn {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1;
+    }
+
     .workspace-grid {
       grid-template-columns: minmax(0, 1.35fr) minmax(320px, .85fr);
       align-items: start;
@@ -1007,6 +1112,28 @@ export async function dashboardHtml(request, env) {
     </div>
   </div>
 
+  <div class="modal-backdrop" id="runtime-token-modal" role="dialog" aria-modal="true" aria-labelledby="runtime-token-title">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="runtime-token-title">配置运行时密钥</h2>
+        <button class="icon-btn" type="button" id="runtime-token-close" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <p><strong>CLOUDFLARE_API_TOKEN is not configured</strong></p>
+        <ul class="modal-list">
+          <li><span class="modal-step">1</span><span>打开 <a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" target="_blank" rel="noopener noreferrer">Cloudflare Workers & Pages</a>，进入当前 Worker。</span></li>
+          <li><span class="modal-step">2</span><span>进入 Settings → Variables and Secrets。</span></li>
+          <li><span class="modal-step">3</span><span>在运行时变量和密钥里添加 <strong>CLOUDFLARE_API_TOKEN</strong>。</span></li>
+          <li><span class="modal-step">4</span><span>重新部署或等待当前环境刷新后再安装。</span></li>
+        </ul>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" type="button" id="runtime-token-dismiss">稍后配置</button>
+        <button class="btn btn-primary" type="button" id="runtime-token-recheck">重新检查</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const runtimeTokenConfigured = ${runtimeTokenConfigured ? "true" : "false"};
     const wizardSteps = Array.from(document.querySelectorAll("[data-wizard-step]"));
@@ -1017,6 +1144,23 @@ export async function dashboardHtml(request, env) {
       const input = document.getElementById("setup-token");
       return input ? input.value.trim() : "";
     }
+
+    function openRuntimeTokenGuide() {
+      document.getElementById("runtime-token-modal")?.classList.add("open");
+    }
+
+    function closeRuntimeTokenGuide() {
+      document.getElementById("runtime-token-modal")?.classList.remove("open");
+    }
+
+    document.getElementById("runtime-token-close")?.addEventListener("click", closeRuntimeTokenGuide);
+    document.getElementById("runtime-token-dismiss")?.addEventListener("click", closeRuntimeTokenGuide);
+    document.getElementById("runtime-token-recheck")?.addEventListener("click", () => window.location.reload());
+    document.getElementById("runtime-token-modal")?.addEventListener("click", (event) => {
+      if (event.target.id === "runtime-token-modal") {
+        closeRuntimeTokenGuide();
+      }
+    });
 
     function showWizardStep(nextIndex) {
       if (!wizardSteps.length) {
@@ -1219,7 +1363,7 @@ export async function dashboardHtml(request, env) {
         const token = setupToken();
 
         if (!runtimeTokenConfigured) {
-          alert("CLOUDFLARE_API_TOKEN is not configured");
+          openRuntimeTokenGuide();
           return;
         }
 
