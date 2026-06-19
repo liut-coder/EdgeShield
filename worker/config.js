@@ -1,5 +1,5 @@
 import { getAuthState, isSetupAuthorized } from "./auth.js";
-import { hasD1Binding } from "./bindings.js";
+import { executeD1Schema, hasD1Binding } from "./bindings.js";
 
 const CONFIG_TABLE = "edge_waf_config";
 const RULES_TABLE = "edge_waf_rules";
@@ -125,7 +125,7 @@ export function firstEnv(env, names) {
 }
 
 async function ensureSchema(db) {
-  await db.exec(`
+  await executeD1Schema(db, `
     CREATE TABLE IF NOT EXISTS ${CONFIG_TABLE} (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,

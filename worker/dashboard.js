@@ -1146,9 +1146,10 @@ export async function dashboardHtml(request, env) {
           <li><span class="modal-step">1</span><span>打开 <a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" target="_blank" rel="noopener noreferrer">Cloudflare Workers & Pages</a>，进入当前 Worker。</span></li>
           <li><span class="modal-step">2</span><span>进入 Settings → Bindings。</span></li>
           <li><span class="modal-step">3</span><span>创建或选择 D1 数据库 <strong>edge_waf_db</strong>。</span></li>
-          <li><span class="modal-step">4</span><span>添加 D1 database 绑定，变量名填写 <strong>DB</strong>。</span></li>
+          <li><span class="modal-step">4</span><span>添加 D1 database binding，变量名必须填写 <strong>DB</strong>。</span></li>
           <li><span class="modal-step">5</span><span>保存并重新部署后，再回到安装页。</span></li>
         </ul>
+        <p>不要在 Variables and Secrets 里添加 <strong>DB=edge_waf_db</strong>，那只是普通变量，Worker 不能当作 D1 使用。</p>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" type="button" id="d1-dismiss">稍后配置</button>

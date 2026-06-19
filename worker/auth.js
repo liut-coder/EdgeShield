@@ -1,4 +1,4 @@
-import { hasD1Binding } from "./bindings.js";
+import { executeD1Schema, hasD1Binding } from "./bindings.js";
 
 const USERS_TABLE = "edge_waf_users";
 const SESSIONS_TABLE = "edge_waf_sessions";
@@ -122,7 +122,7 @@ export async function logoutResponse(request, env) {
 }
 
 async function ensureAuthSchema(db) {
-  await db.exec(`
+  await executeD1Schema(db, `
     CREATE TABLE IF NOT EXISTS ${USERS_TABLE} (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
