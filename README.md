@@ -19,6 +19,7 @@ EdgeShield 用 Snippet 接管入口流量，用 Worker 返回 `allow / challenge
 | Deploy command | `npm run deploy` |
 
 部署时选择“为运行时使用的 Worker 定义环境变量和机密”，不要填到构建变量里。
+`npm run deploy` 会自动查找 D1 数据库 `edge_waf_db`，生成 `DB` Binding，并保留面板里的运行时变量和密钥。
 
 ## 变量
 
@@ -39,6 +40,8 @@ EdgeShield 用 Snippet 接管入口流量，用 Worker 返回 `allow / challenge
 | --- | --- | --- |
 | `DB` | 是 | D1，数据库名建议 `edge_waf_db` |
 | `KV` | 否 | 黑名单，格式 `bad:<ip> = 1` |
+
+如果重新部署后 D1 检测不过，先确认 D1 数据库名是 `edge_waf_db`，Binding 变量名是 `DB`。
 
 Token 权限：
 

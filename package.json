@@ -31,9 +31,9 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "node scripts/deploy-runtime.mjs",
     "deploy:all": "node scripts/deploy-cloudflare.mjs",
-    "check": "node --check worker/index.js && node --check worker/scoring.js && node --check worker/challenge.js && node --check worker/utils.js && node --check worker/bindings.js && node --check worker/auth.js && node --check worker/config.js && node --check worker/installer.js && node --check worker/dashboard.js && node --check snippets/edge-gate.js && node --check public/check.js && node --check scripts/deploy-snippet.mjs && node --check scripts/deploy-cloudflare.mjs"
+    "check": "node --check worker/index.js && node --check worker/scoring.js && node --check worker/challenge.js && node --check worker/utils.js && node --check worker/bindings.js && node --check worker/auth.js && node --check worker/config.js && node --check worker/installer.js && node --check worker/dashboard.js && node --check snippets/edge-gate.js && node --check public/check.js && node --check scripts/deploy-snippet.mjs && node --check scripts/deploy-cloudflare.mjs && node --check scripts/deploy-runtime.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
