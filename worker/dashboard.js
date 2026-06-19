@@ -8,6 +8,7 @@ export async function dashboardHtml(request, env) {
   const auth = await getAuthState(request, env);
   const statusJson = escapeHtml(JSON.stringify(status, null, 2));
   const installed = status.installed === true;
+  const runtimeTokenConfigured = status.cloudflare_api_token_configured;
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -1007,6 +1008,7 @@ export async function dashboardHtml(request, env) {
   </div>
 
   <script>
+    const runtimeTokenConfigured = ${runtimeTokenConfigured ? "true" : "false"};
     const wizardSteps = Array.from(document.querySelectorAll("[data-wizard-step]"));
     const wizardTabs = Array.from(document.querySelectorAll("[data-wizard-tab]"));
     let wizardIndex = 0;
@@ -1216,6 +1218,11 @@ export async function dashboardHtml(request, env) {
         event.preventDefault();
         const token = setupToken();
 
+        if (!runtimeTokenConfigured) {
+          alert("CLOUDFLARE_API_TOKEN is not configured");
+          return;
+        }
+
         if (!token) {
           result.textContent = "请先在授权步骤输入 Token。";
           return;
@@ -1320,8 +1327,6 @@ function renderMainPanel(status, auth, installed) {
 }
 
 function installPanel(status, auth) {
-  const reason = status.reason ? `<div class="result bad">${escapeHtml(status.reason)}</div>` : "";
-
   return `<section class="screen install-screen">
     <aside class="wizard-side" aria-label="安装进度">
       <div class="wizard-brand">
@@ -1446,7 +1451,6 @@ function installPanel(status, auth) {
               </div>
               <div id="result" class="result">点击安装后会创建或更新 Cloudflare Snippet。</div>
             </div>
-            ${reason}
             <div class="wizard-actions install-final-actions">
               <button class="btn btn-secondary" type="button" data-wizard-prev>上一步</button>
               <button id="install-button" class="btn btn-primary" type="submit">安装 Snippet</button>
