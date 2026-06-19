@@ -1,8 +1,11 @@
+import { getAuthState } from "./auth.js";
+import { buildSnippetExpression, getEffectiveConfig } from "./config.js";
 import { getInstallStatus } from "./installer.js";
 
 export async function dashboardHtml(request, env) {
   const url = new URL(request.url);
   const status = await getRuntimeStatus(env, url.origin);
+  const auth = await getAuthState(request, env);
   const statusJson = escapeHtml(JSON.stringify(status, null, 2));
   const installed = status.installed === true;
 
@@ -239,13 +242,20 @@ export async function dashboardHtml(request, env) {
     }
 
     .install-screen {
-      grid-template-columns: minmax(0, 1fr) 360px;
+      grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
       align-items: start;
+      max-width: 980px;
+      margin: 0 auto;
     }
 
     .workspace-grid {
       grid-template-columns: minmax(0, 1.35fr) minmax(320px, .85fr);
       align-items: start;
+    }
+
+    .auth-screen {
+      max-width: 480px;
+      margin: 48px auto 0;
     }
 
     .panel {
@@ -350,6 +360,176 @@ export async function dashboardHtml(request, env) {
     .endpoint span {
       display: block;
       margin-top: 1px;
+      color: var(--muted);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .wizard-side {
+      position: sticky;
+      top: 0;
+      display: grid;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px;
+      box-shadow: 0 8px 24px rgb(15 23 42 / 5%);
+    }
+
+    .wizard-brand {
+      display: grid;
+      gap: 5px;
+      padding: 4px 4px 10px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .wizard-brand strong {
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .wizard-brand span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .wizard-progress {
+      display: grid;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .wizard-tab {
+      display: grid;
+      width: 100%;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 9px;
+      align-items: center;
+      min-height: 44px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      padding: 7px 8px;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+    }
+
+    .wizard-tab strong {
+      display: block;
+      color: inherit;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+
+    .wizard-tab span:last-child {
+      display: block;
+      margin-top: 1px;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .wizard-tab-num {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--panel-soft);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .wizard-tab.active {
+      border-color: color-mix(in srgb, var(--brand) 26%, var(--line));
+      background: #fff8f2;
+      color: var(--brand-strong);
+    }
+
+    .wizard-tab.active .wizard-tab-num {
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .wizard-card {
+      min-height: 520px;
+    }
+
+    .wizard-step {
+      display: none;
+    }
+
+    .wizard-step.active {
+      display: block;
+    }
+
+    .wizard-page {
+      display: grid;
+      min-height: 466px;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 18px;
+      padding: 20px;
+    }
+
+    .wizard-title {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line-soft);
+      padding-bottom: 16px;
+    }
+
+    .wizard-title h1 {
+      font-size: clamp(24px, 3vw, 32px);
+    }
+
+    .wizard-copy {
+      max-width: 620px;
+      color: var(--muted);
+    }
+
+    .wizard-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      border-top: 1px solid var(--line-soft);
+      padding-top: 16px;
+    }
+
+    .wizard-actions-end {
+      justify-content: flex-end;
+    }
+
+    .check-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .check-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 58px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 12px;
+    }
+
+    .check-item strong {
+      display: block;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .check-item span {
+      display: block;
+      margin-top: 2px;
       color: var(--muted);
       font-size: 13px;
       overflow-wrap: anywhere;
@@ -593,6 +773,24 @@ export async function dashboardHtml(request, env) {
         display: none;
       }
 
+      .wizard-side {
+        position: static;
+      }
+
+      .wizard-progress {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .wizard-tab {
+        grid-template-columns: 1fr;
+        justify-items: center;
+        text-align: center;
+      }
+
+      .wizard-tab span:last-child {
+        display: none;
+      }
+
       .content {
         padding: 12px;
       }
@@ -614,6 +812,10 @@ export async function dashboardHtml(request, env) {
       .btn {
         width: 100%;
       }
+
+      .wizard-actions {
+        flex-direction: column;
+      }
     }
   </style>
 </head>
@@ -628,6 +830,7 @@ export async function dashboardHtml(request, env) {
         <div class="topbar-actions">
           ${pill(installed ? "已安装" : "待安装", installed ? "ok" : "warn")}
           ${pill(status.cloudflare_api_token_configured ? "Token 已配置" : "Token 未配置", status.cloudflare_api_token_configured ? "ok" : "bad")}
+          ${auth.user ? pill(auth.user.username, "ok") : ""}
         </div>
       </header>
 
@@ -644,7 +847,7 @@ export async function dashboardHtml(request, env) {
         </aside>
 
         <main class="content">
-          ${installed ? workspacePanel(status) : installPanel(status)}
+          ${renderMainPanel(status, auth, installed)}
 
           <details>
             <summary>诊断</summary>
@@ -656,6 +859,197 @@ export async function dashboardHtml(request, env) {
   </div>
 
   <script>
+    const wizardSteps = Array.from(document.querySelectorAll("[data-wizard-step]"));
+    const wizardTabs = Array.from(document.querySelectorAll("[data-wizard-tab]"));
+    let wizardIndex = 0;
+
+    function showWizardStep(nextIndex) {
+      if (!wizardSteps.length) {
+        return;
+      }
+
+      wizardIndex = Math.max(0, Math.min(nextIndex, wizardSteps.length - 1));
+
+      wizardSteps.forEach((step, index) => {
+        step.classList.toggle("active", index === wizardIndex);
+      });
+
+      wizardTabs.forEach((tab, index) => {
+        const active = index === wizardIndex;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-current", active ? "step" : "false");
+      });
+    }
+
+    document.querySelectorAll("[data-wizard-next]").forEach((button) => {
+      button.addEventListener("click", () => showWizardStep(wizardIndex + 1));
+    });
+
+    document.querySelectorAll("[data-wizard-prev]").forEach((button) => {
+      button.addEventListener("click", () => showWizardStep(wizardIndex - 1));
+    });
+
+    wizardTabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => showWizardStep(index));
+    });
+
+    const configForm = document.getElementById("config-form");
+    const saveConfigButton = document.getElementById("save-config-button");
+
+    if (configForm && saveConfigButton) {
+      const configResult = document.getElementById("config-result");
+
+      saveConfigButton.addEventListener("click", async () => {
+        const tokenInput = document.getElementById("config-token");
+        const token = tokenInput ? tokenInput.value.trim() : "";
+
+        if (tokenInput && !token) {
+          configResult.textContent = "请输入 CLOUDFLARE_API_TOKEN。";
+          return;
+        }
+
+        saveConfigButton.disabled = true;
+        configResult.textContent = "正在保存规则...";
+
+        try {
+          const payload = {
+            protected_hostname: document.getElementById("protected-hostname").value.trim(),
+            protected_path_prefix: document.getElementById("protected-path-prefix").value.trim(),
+            cloudflare_zone_id: document.getElementById("cloudflare-zone-id").value.trim(),
+            snippet_expression: document.getElementById("snippet-expression").value.trim()
+          };
+
+          const response = await fetch("/__edge-waf/config", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(token ? { "x-api-token": token } : {})
+            },
+            body: JSON.stringify(payload)
+          });
+          const data = await response.json();
+
+          if (!response.ok || !data.ok) {
+            throw new Error(data.error || "config_save_failed");
+          }
+
+          configResult.textContent = "已保存到 D1。";
+          if (wizardSteps.length) {
+            showWizardStep(2);
+          }
+        } catch (error) {
+          configResult.textContent = "保存失败：" + (error.message || error);
+        } finally {
+          saveConfigButton.disabled = false;
+        }
+      });
+    }
+
+    const adminSetupButton = document.getElementById("setup-admin-button");
+
+    if (adminSetupButton) {
+      adminSetupButton.addEventListener("click", async () => {
+        const tokenInput = document.getElementById("admin-setup-token");
+        const passwordInput = document.getElementById("admin-password");
+        const result = document.getElementById("admin-setup-result");
+
+        if (!tokenInput || !passwordInput) {
+          showWizardStep(3);
+          return;
+        }
+
+        const username = document.getElementById("admin-username").value.trim();
+        const password = passwordInput.value;
+        const token = tokenInput.value.trim();
+
+        if (!password && adminSetupButton.textContent.includes("下一步")) {
+          showWizardStep(3);
+          return;
+        }
+
+        if (!username || !password || !token) {
+          result.textContent = "请填写用户名、密码和 Token。";
+          return;
+        }
+
+        adminSetupButton.disabled = true;
+        result.textContent = "正在创建管理员...";
+
+        try {
+          const response = await fetch("/__edge-waf/auth/setup", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-api-token": token
+            },
+            body: JSON.stringify({ username, password })
+          });
+          const data = await response.json();
+
+          if (!response.ok || !data.ok) {
+            throw new Error(data.error || "setup_failed");
+          }
+
+          result.textContent = "管理员已创建。";
+          if (wizardSteps.length) {
+            showWizardStep(3);
+          } else {
+            window.location.reload();
+          }
+        } catch (error) {
+          result.textContent = "创建失败：" + (error.message || error);
+        } finally {
+          adminSetupButton.disabled = false;
+        }
+      });
+    }
+
+    const loginForm = document.getElementById("login-form");
+
+    if (loginForm) {
+      const loginButton = document.getElementById("login-button");
+      const loginResult = document.getElementById("login-result");
+
+      loginForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        loginButton.disabled = true;
+        loginResult.textContent = "正在登录...";
+
+        try {
+          const response = await fetch("/__edge-waf/auth/login", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json"
+            },
+            body: JSON.stringify({
+              username: document.getElementById("login-username").value.trim(),
+              password: document.getElementById("login-password").value
+            })
+          });
+          const data = await response.json();
+
+          if (!response.ok || !data.ok) {
+            throw new Error(data.error || "login_failed");
+          }
+
+          window.location.reload();
+        } catch (error) {
+          loginResult.textContent = "登录失败：" + (error.message || error);
+        } finally {
+          loginButton.disabled = false;
+        }
+      });
+    }
+
+    const logoutButton = document.getElementById("logout-button");
+
+    if (logoutButton) {
+      logoutButton.addEventListener("click", async () => {
+        await fetch("/__edge-waf/auth/logout", { method: "POST" });
+        window.location.reload();
+      });
+    }
+
     const form = document.getElementById("install-form");
 
     if (form) {
@@ -726,9 +1120,7 @@ export async function statusResponse(request, env) {
 }
 
 async function getRuntimeStatus(env, origin) {
-  const protectedHostname = firstEnv(env, ["PROTECTED_HOSTNAME", "HOSTNAME"]);
-  const protectedPathPrefix = firstEnv(env, ["PROTECTED_PATH_PREFIX", "PATH_PREFIX"]);
-  const snippetExpression = env.SNIPPET_EXPRESSION || buildSnippetExpression(protectedHostname, protectedPathPrefix);
+  const config = await getEffectiveConfig(env);
   const installStatus = await getInstallStatus(env, origin);
 
   return {
@@ -737,104 +1129,259 @@ async function getRuntimeStatus(env, origin) {
     decision_url: `${origin}/__edge-waf/decision`,
     install_url: `${origin}/__edge-waf/install`,
     cloudflare_api_token_configured: Boolean(env.CLOUDFLARE_API_TOKEN),
-    protected_hostname: protectedHostname,
-    protected_path_prefix: protectedPathPrefix,
-    snippet_name: installStatus.snippet_name || env.SNIPPET_NAME || "edge_waf_gate",
-    snippet_expression: installStatus.snippet_expression || snippetExpression,
-    zone_configured: Boolean(firstEnv(env, [
-      "CLOUDFLARE_ZONE_ID",
-      "CLOUDFLARE_ZONEID",
-      "ZONE_ID",
-      "ZONEID",
-      "CF_ZONE_ID",
-      "CF_ZONEID",
-      "zoneid",
-      "CLOUDFLARE_ZONE_NAME",
-      "ZONE_NAME"
-    ]) || protectedHostname),
+    protected_hostname: config.protected_hostname,
+    protected_path_prefix: config.protected_path_prefix,
+    cloudflare_zone_id: config.cloudflare_zone_id,
+    cloudflare_zone_name: config.cloudflare_zone_name,
+    snippet_name: installStatus.snippet_name || config.snippet_name || "edge_waf_gate",
+    snippet_expression: installStatus.snippet_expression || buildSnippetExpression(config),
+    snippet_rules: config.snippet_rules,
+    config_source: config.config_source,
+    d1_bound: config.d1_bound,
+    zone_configured: Boolean(config.cloudflare_zone_id || config.cloudflare_zone_name || config.protected_hostname),
     kv_bound: Boolean(env.KV)
   };
 }
 
-function installPanel(status) {
+function renderMainPanel(status, auth, installed) {
+  if (!installed) {
+    return installPanel(status, auth);
+  }
+
+  if (!auth.available) {
+    return authUnavailablePanel();
+  }
+
+  if (!auth.has_users) {
+    return adminSetupPanel();
+  }
+
+  if (!auth.user) {
+    return loginPanel();
+  }
+
+  return workspacePanel(status, auth.user);
+}
+
+function installPanel(status, auth) {
   const reason = status.reason ? `<div class="result bad">${escapeHtml(status.reason)}</div>` : "";
 
   return `<section class="screen install-screen">
-    <div class="hero-install">
-      <div class="hero-row">
-        <div>
-          <h1>安装 EdgeShield</h1>
-          <p>变量在 Cloudflare 运行时配置；这里只负责创建 Snippet。</p>
+    <aside class="wizard-side" aria-label="安装进度">
+      <div class="wizard-brand">
+        <strong>安装 EdgeShield</strong>
+        <span>检测配置后创建 Snippet</span>
+      </div>
+      <div class="wizard-progress">
+        ${wizardTab(0, "检测", "运行时变量", true)}
+        ${wizardTab(1, "范围", "保护目标", false)}
+        ${wizardTab(2, "账号", "工作台登录", false)}
+        ${wizardTab(3, "安装", "创建 Snippet", false)}
+      </div>
+    </aside>
+
+    <section class="panel wizard-card">
+      <div class="wizard-step active" data-wizard-step="0">
+        <div class="wizard-page">
+          <div class="wizard-title">
+            <div>
+              <h1>检测配置</h1>
+              <p class="wizard-copy">已配置就直接下一步；缺少时再去 Cloudflare 的运行时变量和密钥里补齐。</p>
+            </div>
+            ${pill(status.cloudflare_api_token_configured ? "Token 已配置" : "Token 未配置", status.cloudflare_api_token_configured ? "ok" : "bad")}
+          </div>
+
+          <div class="check-list">
+            ${checkItem("CLOUDFLARE_API_TOKEN", "密钥，权限需要 Snippets:Edit 和 Zone:Read", status.cloudflare_api_token_configured)}
+            ${checkItem("PROTECTED_HOSTNAME", status.protected_hostname || "要保护的域名", Boolean(status.protected_hostname))}
+            ${checkItem("PROTECTED_PATH_PREFIX", status.protected_path_prefix || "可选，默认保护全部路径", true)}
+          </div>
+
+          <div class="wizard-actions wizard-actions-end">
+            <button class="btn btn-primary" type="button" data-wizard-next>下一步</button>
+          </div>
         </div>
-        ${pill("1 分钟", "warn")}
       </div>
 
-      <ol class="step-list">
-        <li class="step">
-          <span class="step-num">1</span>
-          <span><strong>配置变量</strong><span>CLOUDFLARE_API_TOKEN 和 PROTECTED_HOSTNAME</span></span>
-        </li>
-        <li class="step">
-          <span class="step-num">2</span>
-          <span><strong>安装 Snippet</strong><span>输入同一个 CLOUDFLARE_API_TOKEN 执行安装</span></span>
-        </li>
-        <li class="step">
-          <span class="step-num">3</span>
-          <span><strong>进入工作台</strong><span>安装成功后此页面自动切换</span></span>
-        </li>
-      </ol>
-    </div>
+      <div class="wizard-step" data-wizard-step="1">
+        <div class="wizard-page">
+          <div class="wizard-title">
+            <div>
+              <h1>规则</h1>
+              <p class="wizard-copy">规则保存到 D1。Snippet 安装时读取这里的最新表达式。</p>
+            </div>
+            ${pill(status.d1_bound ? "D1 已绑定" : "D1 未绑定", status.d1_bound ? "ok" : "bad")}
+          </div>
 
-    <div class="screen">
-      <section class="panel">
-        <div class="panel-head">
-          <h2 class="panel-title">Snippet 安装</h2>
-          ${pill(status.cloudflare_api_token_configured ? "Token 已配置" : "Token 未配置", status.cloudflare_api_token_configured ? "ok" : "bad")}
+          <form id="config-form">
+            <label>
+              PROTECTED_HOSTNAME
+              <input id="protected-hostname" name="protected_hostname" autocomplete="off" placeholder="www.example.com" value="${escapeAttribute(status.protected_hostname || "")}">
+            </label>
+            <label>
+              PROTECTED_PATH_PREFIX
+              <input id="protected-path-prefix" name="protected_path_prefix" autocomplete="off" placeholder="/login，可留空" value="${escapeAttribute(status.protected_path_prefix || "")}">
+            </label>
+            <label>
+              CLOUDFLARE_ZONE_ID
+              <input id="cloudflare-zone-id" name="cloudflare_zone_id" autocomplete="off" placeholder="可留空自动匹配" value="${escapeAttribute(status.cloudflare_zone_id || status.zone_id || "")}">
+            </label>
+            <label>
+              SNIPPET_EXPRESSION
+              <input id="snippet-expression" name="snippet_expression" autocomplete="off" placeholder='(http.host eq "www.example.com")' value="${escapeAttribute(status.snippet_expression || "")}">
+            </label>
+            <label>
+              CLOUDFLARE_API_TOKEN
+              <input id="config-token" name="token" type="password" autocomplete="off" placeholder="用于保存配置，不会存入 D1">
+            </label>
+            <div id="config-result" class="result">${status.d1_bound ? "可保存到 D1。" : "绑定 D1 后可保存规则；当前只能使用运行时变量。"}</div>
+          </form>
+
+          <div class="wizard-actions">
+            <button class="btn btn-secondary" type="button" data-wizard-prev>上一步</button>
+            <button class="btn btn-primary" id="save-config-button" type="button">保存并继续</button>
+          </div>
         </div>
-        <div class="panel-body">
+      </div>
+
+      <div class="wizard-step" data-wizard-step="2">
+        <div class="wizard-page">
+          <div class="wizard-title">
+            <div>
+              <h1>账号</h1>
+              <p class="wizard-copy">创建工作台管理员。安装完成后用这个账号登录。</p>
+            </div>
+            ${pill(auth.available ? (auth.has_users ? "已创建" : "待创建") : "D1 未绑定", auth.available && auth.has_users ? "ok" : "warn")}
+          </div>
+
+          <form id="admin-setup-form">
+            <label>
+              用户名
+              <input id="admin-username" name="username" autocomplete="username" placeholder="admin" value="admin">
+            </label>
+            <label>
+              密码
+              <input id="admin-password" name="password" type="password" autocomplete="new-password" placeholder="至少 10 位">
+            </label>
+            <label>
+              CLOUDFLARE_API_TOKEN
+              <input id="admin-setup-token" name="token" type="password" autocomplete="off" placeholder="用于首次创建管理员">
+            </label>
+            <div id="admin-setup-result" class="result">${auth.has_users ? "管理员已创建。" : "Token 只用于初始化，不会保存。"}</div>
+          </form>
+
+          <div class="wizard-actions">
+            <button class="btn btn-secondary" type="button" data-wizard-prev>上一步</button>
+            <button class="btn btn-primary" id="setup-admin-button" type="button">${auth.has_users ? "下一步" : "创建并继续"}</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="wizard-step" data-wizard-step="3">
+        <div class="wizard-page">
+          <div class="wizard-title">
+            <div>
+              <h1>安装 Snippet</h1>
+              <p class="wizard-copy">输入运行时密钥里的同一个 Token。安装完成后自动进入工作台。</p>
+            </div>
+            ${pill("最后一步", "warn")}
+          </div>
+
           <form id="install-form">
             <label>
               CLOUDFLARE_API_TOKEN
-              <input id="install-token" name="token" type="password" autocomplete="off" placeholder="粘贴运行时密钥中的 Token" required>
+              <input id="install-token" name="token" type="password" autocomplete="off" placeholder="用于确认安装权限，不会写入代码" required>
             </label>
-            <button id="install-button" class="btn btn-primary" type="submit">安装 Snippet</button>
             <div id="result" class="result">安装完成后自动进入工作台。</div>
             ${reason}
+            <div class="wizard-actions">
+              <button class="btn btn-secondary" type="button" data-wizard-prev>上一步</button>
+              <button id="install-button" class="btn btn-primary" type="submit">安装 Snippet</button>
+            </div>
           </form>
         </div>
-      </section>
+      </div>
+    </section>
+  </section>`;
+}
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2 class="panel-title">运行时变量</h2>
-          ${pill(status.zone_configured ? "范围已配置" : "范围未配置", status.zone_configured ? "ok" : "bad")}
-        </div>
-        <div class="panel-body">
-          <div class="table">
-            ${variableRow("CLOUDFLARE_API_TOKEN", "必填", status.cloudflare_api_token_configured)}
-            ${variableRow("PROTECTED_HOSTNAME", status.protected_hostname || "必填", Boolean(status.protected_hostname))}
-            ${variableRow("PROTECTED_PATH_PREFIX", status.protected_path_prefix || "可选", true)}
-            ${variableRow("CLOUDFLARE_ZONE_ID", status.zone_id || "可选，通常自动匹配", status.zone_configured)}
-            ${variableRow("SNIPPET_EXPRESSION", status.snippet_expression || "可选", true)}
-          </div>
-        </div>
-      </section>
+function authUnavailablePanel() {
+  return `<section class="panel auth-screen">
+    <div class="panel-head">
+      <h1>需要 D1</h1>
+      ${pill("未绑定", "bad")}
+    </div>
+    <div class="panel-body">
+      <p>D1 用于保存账号、会话和 Snippet 规则。绑定 DB 后重新部署，再打开工作台。</p>
     </div>
   </section>`;
 }
 
-function workspacePanel(status) {
+function adminSetupPanel() {
+  return `<section class="panel auth-screen">
+    <div class="panel-head">
+      <h1>创建管理员</h1>
+      ${pill("首次登录", "warn")}
+    </div>
+    <div class="panel-body">
+      <form id="admin-setup-form">
+        <label>
+          用户名
+          <input id="admin-username" name="username" autocomplete="username" placeholder="admin" value="admin">
+        </label>
+        <label>
+          密码
+          <input id="admin-password" name="password" type="password" autocomplete="new-password" placeholder="至少 10 位">
+        </label>
+        <label>
+          CLOUDFLARE_API_TOKEN
+          <input id="admin-setup-token" name="token" type="password" autocomplete="off" placeholder="用于首次创建管理员">
+        </label>
+        <div id="admin-setup-result" class="result">Token 只用于初始化，不会保存。</div>
+        <button class="btn btn-primary" id="setup-admin-button" type="button">创建管理员</button>
+      </form>
+    </div>
+  </section>`;
+}
+
+function loginPanel() {
+  return `<section class="panel auth-screen">
+    <div class="panel-head">
+      <h1>登录</h1>
+      ${pill("工作台", "ok")}
+    </div>
+    <div class="panel-body">
+      <form id="login-form">
+        <label>
+          用户名
+          <input id="login-username" name="username" autocomplete="username" placeholder="admin">
+        </label>
+        <label>
+          密码
+          <input id="login-password" name="password" type="password" autocomplete="current-password">
+        </label>
+        <div id="login-result" class="result">登录后进入工作台。</div>
+        <button class="btn btn-primary" id="login-button" type="submit">登录</button>
+      </form>
+    </div>
+  </section>`;
+}
+
+function workspacePanel(status, user) {
   return `<section class="screen">
     <section class="panel">
       <div class="panel-head">
-        <h1>工作台</h1>
-        ${pill("防护启用", "ok")}
+        <div>
+          <h1>工作台</h1>
+          <p>${escapeHtml(user.username)}</p>
+        </div>
+        <button class="btn btn-secondary" id="logout-button" type="button">退出</button>
       </div>
       <div class="panel-body">
         <div class="stat-grid">
           ${statCard("Snippet", status.snippet_name || "edge_waf_gate", "ok")}
           ${statCard("保护域名", status.protected_hostname || "未设置", status.protected_hostname ? "ok" : "bad")}
-          ${statCard("Zone", status.zone_id || "自动匹配", status.zone_configured ? "ok" : "warn")}
+          ${statCard("D1 规则库", status.d1_bound ? "已绑定" : "未绑定", status.d1_bound ? "ok" : "bad")}
           ${statCard("KV 黑名单", status.kv_bound ? "已绑定" : "未绑定", status.kv_bound ? "ok" : "warn")}
         </div>
       </div>
@@ -843,15 +1390,30 @@ function workspacePanel(status) {
     <section class="screen workspace-grid">
       <section class="panel">
         <div class="panel-head">
-          <h2 class="panel-title">范围</h2>
+          <h2 class="panel-title">规则</h2>
           ${pill(status.installed ? "已生效" : "未生效", status.installed ? "ok" : "bad")}
         </div>
         <div class="panel-body">
-          <div class="kv-list">
-            ${kvItem("规则表达式", status.snippet_expression || "未设置")}
-            ${kvItem("路径前缀", status.protected_path_prefix || "全部路径")}
-            ${kvItem("决策动作", "allow / challenge / block")}
-          </div>
+          <form id="config-form">
+            <label>
+              PROTECTED_HOSTNAME
+              <input id="protected-hostname" name="protected_hostname" autocomplete="off" value="${escapeAttribute(status.protected_hostname || "")}">
+            </label>
+            <label>
+              PROTECTED_PATH_PREFIX
+              <input id="protected-path-prefix" name="protected_path_prefix" autocomplete="off" placeholder="全部路径" value="${escapeAttribute(status.protected_path_prefix || "")}">
+            </label>
+            <label>
+              CLOUDFLARE_ZONE_ID
+              <input id="cloudflare-zone-id" name="cloudflare_zone_id" autocomplete="off" placeholder="自动匹配" value="${escapeAttribute(status.cloudflare_zone_id || status.zone_id || "")}">
+            </label>
+            <label>
+              SNIPPET_EXPRESSION
+              <input id="snippet-expression" name="snippet_expression" autocomplete="off" value="${escapeAttribute(status.snippet_expression || "")}">
+            </label>
+            <div id="config-result" class="result">保存后重新安装 Snippet 生效。</div>
+            <button class="btn btn-primary" id="save-config-button" type="button">保存规则</button>
+          </form>
         </div>
       </section>
 
@@ -877,6 +1439,26 @@ function navItem(label, active) {
     <span class="side-dot"></span>
     <span>${escapeHtml(label)}</span>
   </a>`;
+}
+
+function wizardTab(index, title, meta, active) {
+  return `<button class="wizard-tab ${active ? "active" : ""}" type="button" data-wizard-tab="${index}" aria-current="${active ? "step" : "false"}">
+    <span class="wizard-tab-num">${index + 1}</span>
+    <span>
+      <strong>${escapeHtml(title)}</strong>
+      <span>${escapeHtml(meta)}</span>
+    </span>
+  </button>`;
+}
+
+function checkItem(label, value, configured) {
+  return `<div class="check-item">
+    <span>
+      <strong>${escapeHtml(label)}</strong>
+      <span>${escapeHtml(value)}</span>
+    </span>
+    ${pill(configured ? "已就绪" : "缺少", configured ? "ok" : "bad")}
+  </div>`;
 }
 
 function pill(label, tone) {
@@ -915,32 +1497,6 @@ function variableRow(name, value, configured) {
   </div>`;
 }
 
-function buildSnippetExpression(hostname, pathPrefix) {
-  if (!hostname) {
-    return "";
-  }
-
-  const hostExpression = `(http.host eq "${hostname}")`;
-
-  if (!pathPrefix) {
-    return hostExpression;
-  }
-
-  return `(${hostExpression} and starts_with(http.request.uri.path, "${pathPrefix}"))`;
-}
-
-function firstEnv(env, names) {
-  for (const name of names) {
-    const value = env[name];
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return "";
-}
-
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -949,4 +1505,8 @@ function escapeHtml(value) {
     '"': "&quot;",
     "'": "&#39;"
   })[char]);
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replace(/`/g, "&#96;");
 }

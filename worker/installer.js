@@ -1,3 +1,5 @@
+import { buildSnippetExpression, firstEnv, getEffectiveConfig } from "./config.js";
+
 const API_BASE = "https://api.cloudflare.com/client/v4";
 
 const ZONE_ID_NAMES = [
@@ -18,9 +20,10 @@ export async function installSnippet(request, env) {
   }
 
   const apiToken = requiredEnv(env, "CLOUDFLARE_API_TOKEN");
-  const zoneId = await resolveZoneId(env, apiToken);
-  const snippetName = env.SNIPPET_NAME || "edge_waf_gate";
-  const snippetExpression = env.SNIPPET_EXPRESSION || buildSnippetExpression(env);
+  const config = await getEffectiveConfig(env);
+  const zoneId = await resolveZoneId(config, apiToken);
+  const snippetName = config.snippet_name || "edge_waf_gate";
+  const snippetExpression = buildSnippetExpression(config);
   const decisionUrl = `${new URL(request.url).origin}/__edge-waf/decision`;
   const source = renderSnippet(decisionUrl);
 
@@ -45,8 +48,9 @@ export async function installSnippet(request, env) {
 
 export async function getInstallStatus(env, origin) {
   const apiToken = firstEnv(env, ["CLOUDFLARE_API_TOKEN"]);
-  const snippetName = env.SNIPPET_NAME || "edge_waf_gate";
-  const snippetExpression = env.SNIPPET_EXPRESSION || buildSnippetExpression(env);
+  const config = await getEffectiveConfig(env);
+  const snippetName = config.snippet_name || "edge_waf_gate";
+  const snippetExpression = buildSnippetExpression(config);
 
   if (!apiToken) {
     return {
@@ -60,7 +64,7 @@ export async function getInstallStatus(env, origin) {
   }
 
   try {
-    const zoneId = await resolveZoneId(env, apiToken);
+    const zoneId = await resolveZoneId(config, apiToken);
     const rules = await listSnippetRules(apiToken, zoneId);
     const rule = rules.find((item) => item.snippet_name === snippetName);
 
@@ -85,20 +89,20 @@ export async function getInstallStatus(env, origin) {
 }
 
 async function resolveZoneId(env, apiToken) {
-  const explicitZoneId = firstEnv(env, ZONE_ID_NAMES);
+  const explicitZoneId = env.cloudflare_zone_id || firstEnv(env, ZONE_ID_NAMES);
 
   if (explicitZoneId) {
     return explicitZoneId;
   }
 
-  const zoneName = firstEnv(env, ["CLOUDFLARE_ZONE_NAME", "ZONE_NAME"]);
+  const zoneName = env.cloudflare_zone_name || firstEnv(env, ["CLOUDFLARE_ZONE_NAME", "ZONE_NAME"]);
 
   if (zoneName) {
     const zone = await findZone(apiToken, zoneName);
     return zone.id;
   }
 
-  const protectedHostname = firstEnv(env, ["PROTECTED_HOSTNAME", "HOSTNAME"]);
+  const protectedHostname = env.protected_hostname || firstEnv(env, ["PROTECTED_HOSTNAME", "HOSTNAME"]);
 
   if (protectedHostname) {
     const zones = await listZones(apiToken);
@@ -113,23 +117,6 @@ async function resolveZoneId(env, apiToken) {
   }
 
   throw new Error("Set CLOUDFLARE_ZONE_ID, CLOUDFLARE_ZONE_NAME, or PROTECTED_HOSTNAME");
-}
-
-function buildSnippetExpression(env) {
-  const hostname = firstEnv(env, ["PROTECTED_HOSTNAME", "HOSTNAME"]);
-
-  if (!hostname) {
-    return "";
-  }
-
-  const hostExpression = `(http.host eq "${hostname}")`;
-  const pathPrefix = firstEnv(env, ["PROTECTED_PATH_PREFIX", "PATH_PREFIX"]);
-
-  if (!pathPrefix) {
-    return hostExpression;
-  }
-
-  return `(${hostExpression} and starts_with(http.request.uri.path, "${pathPrefix}"))`;
 }
 
 async function findZone(apiToken, zoneName) {
@@ -322,18 +309,6 @@ function normalizeRules(result) {
   }
 
   return [];
-}
-
-function firstEnv(env, names) {
-  for (const name of names) {
-    const value = env[name];
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return "";
 }
 
 function requiredEnv(env, name) {

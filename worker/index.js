@@ -1,4 +1,6 @@
+import { loginResponse, logoutResponse, setupAdminResponse } from "./auth.js";
 import { challengeHtml, checkScript } from "./challenge.js";
+import { saveConfigResponse } from "./config.js";
 import { dashboardHtml, statusResponse } from "./dashboard.js";
 import { installSnippet } from "./installer.js";
 import { scoreRequest } from "./scoring.js";
@@ -26,6 +28,34 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/__edge-waf/status") {
       return await statusResponse(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/__edge-waf/auth/setup") {
+      try {
+        return await setupAdminResponse(request, env);
+      } catch (error) {
+        return jsonResponse({ error: error.message || "setup_failed" }, 500);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/__edge-waf/auth/login") {
+      try {
+        return await loginResponse(request, env);
+      } catch (error) {
+        return jsonResponse({ error: error.message || "login_failed" }, 500);
+      }
+    }
+
+    if (request.method === "POST" && url.pathname === "/__edge-waf/auth/logout") {
+      return await logoutResponse(request, env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/__edge-waf/config") {
+      try {
+        return await saveConfigResponse(request, env);
+      } catch (error) {
+        return jsonResponse({ error: error.message || "config_save_failed" }, 500);
+      }
     }
 
     if (request.method === "GET" && url.pathname === "/check.js") {

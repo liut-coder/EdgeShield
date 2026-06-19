@@ -33,12 +33,28 @@ EdgeShield 用 Snippet 接管入口流量，用 Worker 返回 `allow / challenge
 
 `CLOUDFLARE_ZONE_ID` 通常不用填。只要 `CLOUDFLARE_API_TOKEN` 有 `Zone:Read`，Worker 会按 `PROTECTED_HOSTNAME` 自动匹配 Zone。
 
+绑定：
+
+| 绑定 | 必填 | 作用 |
+| --- | --- | --- |
+| `DB` | 是 | D1，保存保护范围和 Snippet 规则 |
+| `KV` | 否 | 黑名单，格式 `bad:<ip> = 1` |
+
 Token 权限：
 
 | 范围 | 权限 |
 | --- | --- |
 | Zone | `Snippets:Edit` |
 | Zone | `Zone:Read` |
+
+最佳实践：
+
+- 配在 `Production` 的运行时变量和密钥里，Preview 环境要单独配置。
+- `CLOUDFLARE_API_TOKEN` 用密钥，不要写进代码、D1 或 `wrangler.toml`。
+- Snippet 规则、管理员账号和会话保存到 D1；安装时读取 D1 的最新规则。
+- D1/KV 绑定是部署配置，不能由正在运行的 Worker 直接附加到自身。
+- Git 部署用 `npm run deploy`；`npm run deploy:all` 适合本地 CLI 一次性部署。
+- 改完 Cloudflare 变量后，重新部署一次或等待当前环境刷新，再打开首页检测。
 
 ## 安装
 
@@ -48,9 +64,14 @@ Token 权限：
 <Worker 地址>/
 ```
 
-未安装时会进入安装页。输入运行时密钥里的 `CLOUDFLARE_API_TOKEN`，点击 `安装 Snippet`。
+未安装时会进入安装页：
 
-安装成功后自动进入工作台；之后刷新首页不再显示安装页。
+1. 检测运行时变量
+2. 保存 D1 规则
+3. 创建管理员账号
+4. 安装 Snippet
+
+安装成功后自动进入工作台。之后刷新首页会先显示登录页。
 
 ## 工作台
 
@@ -58,11 +79,12 @@ Token 权限：
 
 - Snippet 状态
 - 保护范围
+- D1 规则库状态
 - Zone 匹配结果
 - KV 黑名单状态
 - 决策接口、状态接口、安装接口
 
-重新安装或更新 Snippet 时，在工作台复制安装接口，或直接请求：
+登录后可以修改 D1 规则。修改后重新安装 Snippet 生效：
 
 ```bash
 curl -X POST "<Worker 地址>/__edge-waf/install" \

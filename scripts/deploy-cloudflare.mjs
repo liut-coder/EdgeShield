@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 
 const DEFAULTS = {
   workerName: "edge-waf-v0-1",
+  d1Database: "edge-waf-v0-db",
   kvNamespace: "edge-waf-v0-kv",
   snippetName: "edge_waf_gate"
 };
@@ -13,6 +14,7 @@ const protectedPathPrefix = firstEnv("PROTECTED_PATH_PREFIX", "PATH_PREFIX");
 
 const config = {
   workerName: process.env.WORKER_NAME || DEFAULTS.workerName,
+  d1Database: process.env.D1_DATABASE || DEFAULTS.d1Database,
   kvNamespace: process.env.KV_NAMESPACE || DEFAULTS.kvNamespace,
   snippetName: process.env.SNIPPET_NAME || DEFAULTS.snippetName,
   snippetExpression: process.env.SNIPPET_EXPRESSION || buildSnippetExpression(protectedHostname, protectedPathPrefix),
@@ -47,8 +49,9 @@ config.cloudflareApiToken = requiredValue(config.cloudflareApiToken, "CLOUDFLARE
 config.cloudflareAccountId = await resolveAccountId(config);
 config.cloudflareZoneId = await resolveZoneId(config);
 
+const d1Id = await createOrReuseD1Database(config.d1Database);
 const kvId = await createOrReuseKvNamespace(config.kvNamespace);
-await generateWranglerConfig({ workerName: config.workerName, kvId });
+await generateWranglerConfig({ workerName: config.workerName, d1Database: config.d1Database, d1Id, kvId });
 const workerUrl = await deployWorker();
 await renderSnippet(`${workerUrl}/__edge-waf/decision`);
 await deploySnippet(config);
@@ -58,6 +61,8 @@ console.log("Edge WAF deployment complete");
 console.log(`Account id: ${config.cloudflareAccountId}`);
 console.log(`Worker: ${config.workerName}`);
 console.log(`Worker URL: ${workerUrl}`);
+console.log(`D1 database: ${config.d1Database}`);
+console.log(`D1 id: ${d1Id}`);
 console.log(`KV namespace: ${config.kvNamespace}`);
 console.log(`KV id: ${kvId}`);
 console.log(`Snippet: ${config.snippetName}`);
@@ -109,7 +114,7 @@ function validateConfig({
   cloudflareZoneId,
   cloudflareZoneName
 }) {
-  validateWorkerOnlyConfig({ workerName, kvNamespace, snippetName });
+  validateWorkerOnlyConfig({ workerName, kvNamespace, snippetName, d1Database: config.d1Database });
 
   if (!cloudflareApiToken) {
     throw new Error("CLOUDFLARE_API_TOKEN is required for build-time Snippet deployment");
@@ -145,13 +150,17 @@ function validateConfig({
   }
 }
 
-function validateWorkerOnlyConfig({ workerName, kvNamespace, snippetName }) {
+function validateWorkerOnlyConfig({ workerName, kvNamespace, snippetName, d1Database = DEFAULTS.d1Database }) {
   if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(workerName)) {
     throw new Error("WORKER_NAME must use lowercase letters, digits, and hyphens, max 63 chars");
   }
 
   if (!/^[A-Za-z0-9._:-]{1,128}$/.test(kvNamespace)) {
     throw new Error("KV_NAMESPACE must use letters, digits, dot, underscore, colon, or hyphen");
+  }
+
+  if (!/^[A-Za-z0-9._:-]{1,128}$/.test(d1Database)) {
+    throw new Error("D1_DATABASE must use letters, digits, dot, underscore, colon, or hyphen");
   }
 
   if (!/^[a-z0-9_]+$/.test(snippetName)) {
@@ -321,11 +330,43 @@ async function createOrReuseKvNamespace(namespaceTitle) {
   return kvId;
 }
 
-async function generateWranglerConfig({ workerName, kvId }) {
+async function createOrReuseD1Database(databaseName) {
+  const databasesOutput = await run(npxBin(), ["wrangler", "d1", "list"], {
+    capture: true,
+    env: cloudflareEnv()
+  });
+  const databases = parseWranglerJsonArray(databasesOutput);
+  const existing = databases.find((database) => database.name === databaseName);
+
+  if (existing?.uuid || existing?.database_id) {
+    return existing.uuid || existing.database_id;
+  }
+
+  const createOutput = await run(npxBin(), ["wrangler", "d1", "create", databaseName], {
+    capture: true,
+    env: cloudflareEnv()
+  });
+  const d1Id = parseD1Id(createOutput);
+
+  if (!d1Id) {
+    throw new Error("Could not resolve D1 database id from Wrangler output");
+  }
+
+  return d1Id;
+}
+
+async function generateWranglerConfig({ workerName, d1Database, d1Id, kvId }) {
   let toml = await readFile("wrangler.toml", "utf8");
+  const d1Config = `[[d1_databases]]\nbinding = "DB"\ndatabase_name = "${d1Database}"\ndatabase_id = "${d1Id}"`;
   const kvConfig = `kv_namespaces = [\n  { binding = "KV", id = "${kvId}" }\n]`;
 
   toml = toml.replace(/^name\s*=\s*"[^"]*"/m, `name = "${workerName}"`);
+
+  if (/\[\[d1_databases\]\][\s\S]*?(?=\n\[[^[\n]|\n\[\[|$)/m.test(toml)) {
+    toml = toml.replace(/\[\[d1_databases\]\][\s\S]*?(?=\n\[[^[\n]|\n\[\[|$)/m, d1Config);
+  } else {
+    toml = `${toml.trimEnd()}\n\n${d1Config}\n`;
+  }
 
   if (/kv_namespaces\s*=\s*\[[\s\S]*?\]/m.test(toml)) {
     toml = toml.replace(/kv_namespaces\s*=\s*\[[\s\S]*?\]/m, kvConfig);
@@ -410,6 +451,15 @@ function parseWranglerJsonArray(output) {
 
 function parseKvId(output) {
   const match = output.match(/id\s*=\s*"([^"]+)"/) || output.match(/"id"\s*:\s*"([^"]+)"/);
+  return match?.[1] || "";
+}
+
+function parseD1Id(output) {
+  const match =
+    output.match(/database_id\s*=\s*"([^"]+)"/) ||
+    output.match(/"database_id"\s*:\s*"([^"]+)"/) ||
+    output.match(/"uuid"\s*:\s*"([^"]+)"/);
+
   return match?.[1] || "";
 }
 
