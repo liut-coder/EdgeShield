@@ -1,4 +1,5 @@
 import { getAuthState, isSetupAuthorized } from "./auth.js";
+import { hasD1Binding } from "./bindings.js";
 
 const CONFIG_TABLE = "edge_waf_config";
 const RULES_TABLE = "edge_waf_rules";
@@ -15,7 +16,7 @@ const CONFIG_KEYS = new Set([
 export async function getEffectiveConfig(env) {
   const envConfig = readEnvConfig(env);
 
-  if (!env.DB) {
+  if (!hasD1Binding(env.DB)) {
     return {
       ...envConfig,
       d1_bound: false,
@@ -41,16 +42,14 @@ export async function getEffectiveConfig(env) {
 }
 
 export async function saveConfigResponse(request, env) {
-  const auth = request.headers.get("x-api-token") || "";
-
-  if (!env.DB) {
+  if (!hasD1Binding(env.DB)) {
     return jsonResponse({ error: "D1 binding DB is required" }, 400);
   }
 
   const authState = await getAuthState(request, env);
   const setupAuthorized = await isSetupAuthorized(request, env);
 
-  if ((!env.CLOUDFLARE_API_TOKEN || auth !== env.CLOUDFLARE_API_TOKEN) && !authState.user && !setupAuthorized) {
+  if (!authState.user && !setupAuthorized) {
     return jsonResponse({ error: "unauthorized" }, 401);
   }
 

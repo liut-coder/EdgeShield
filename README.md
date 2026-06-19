@@ -66,7 +66,7 @@ Token 权限：
 
 未安装时会进入安装页：
 
-1. 授权
+1. 检测
 2. 规则
 3. 账号
 4. 安装
@@ -86,12 +86,7 @@ Token 权限：
 - KV 黑名单状态
 - 决策接口、状态接口、安装接口
 
-登录后可以修改 D1 规则。修改后重新安装 Snippet 生效：
-
-```bash
-curl -X POST "<Worker 地址>/__edge-waf/install" \
-  -H "x-api-token: <CLOUDFLARE_API_TOKEN>"
-```
+登录后可以修改 D1 规则。修改后在工作台重新安装 Snippet 生效。
 
 ## 规则
 

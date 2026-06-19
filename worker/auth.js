@@ -1,12 +1,13 @@
+import { hasD1Binding } from "./bindings.js";
+
 const USERS_TABLE = "edge_waf_users";
 const SESSIONS_TABLE = "edge_waf_sessions";
-const CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4";
 const SESSION_COOKIE = "edge_waf_session";
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 const PBKDF2_ITERATIONS = 100000;
 
 export async function getAuthState(request, env) {
-  if (!env.DB) {
+  if (!hasD1Binding(env.DB)) {
     return {
       available: false,
       has_users: false,
@@ -24,7 +25,7 @@ export async function getAuthState(request, env) {
 }
 
 export async function setupAdminResponse(request, env) {
-  if (!env.DB) {
+  if (!hasD1Binding(env.DB)) {
     return jsonResponse({ error: "D1 binding DB is required" }, 400);
   }
 
@@ -61,14 +62,8 @@ export async function setupAdminResponse(request, env) {
   });
 }
 
-export async function isSetupAuthorized(request, env) {
-  const token = request.headers.get("x-api-token") || "";
-
-  if (env.CLOUDFLARE_API_TOKEN && token === env.CLOUDFLARE_API_TOKEN) {
-    return true;
-  }
-
-  if (!env.DB || !token) {
+export async function isSetupAuthorized(_request, env) {
+  if (!hasD1Binding(env.DB) || !env.CLOUDFLARE_API_TOKEN) {
     return false;
   }
 
@@ -78,15 +73,11 @@ export async function isSetupAuthorized(request, env) {
     return false;
   }
 
-  if (env.CLOUDFLARE_API_TOKEN) {
-    return true;
-  }
-
-  return await verifyCloudflareApiToken(token);
+  return true;
 }
 
 export async function loginResponse(request, env) {
-  if (!env.DB) {
+  if (!hasD1Binding(env.DB)) {
     return jsonResponse({ error: "D1 binding DB is required" }, 400);
   }
 
@@ -120,7 +111,7 @@ export async function loginResponse(request, env) {
 export async function logoutResponse(request, env) {
   const sessionId = readCookie(request, SESSION_COOKIE);
 
-  if (env.DB && sessionId) {
+  if (hasD1Binding(env.DB) && sessionId) {
     await ensureAuthSchema(env.DB);
     await env.DB.prepare(`DELETE FROM ${SESSIONS_TABLE} WHERE id = ?`).bind(sessionId).run();
   }
@@ -271,18 +262,6 @@ function readCookie(request, name) {
 
 function serializeSessionCookie(sessionId, maxAge) {
   return `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
-}
-
-export async function verifyCloudflareApiToken(token) {
-  const response = await fetch(`${CLOUDFLARE_API_BASE}/user/tokens/verify`, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: "application/json"
-    }
-  });
-  const body = await response.json().catch(() => null);
-
-  return response.ok && body?.success === true;
 }
 
 function randomToken() {

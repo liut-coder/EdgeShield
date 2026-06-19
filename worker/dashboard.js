@@ -4,8 +4,8 @@ import { getInstallStatus } from "./installer.js";
 
 export async function dashboardHtml(request, env) {
   const url = new URL(request.url);
-  const status = await getRuntimeStatus(env, url.origin);
-  const auth = await getAuthState(request, env);
+  const status = await safeRuntimeStatus(env, url.origin);
+  const auth = await safeAuthState(request, env);
   const statusJson = escapeHtml(JSON.stringify(status, null, 2));
   const installed = status.installed === true;
   const runtimeTokenConfigured = status.cloudflare_api_token_configured;
@@ -1159,6 +1159,7 @@ export async function dashboardHtml(request, env) {
 
   <script>
     const runtimeTokenConfigured = ${runtimeTokenConfigured ? "true" : "false"};
+    const d1Bound = ${status.d1_bound ? "true" : "false"};
     const wizardSteps = Array.from(document.querySelectorAll("[data-wizard-step]"));
     const wizardTabs = Array.from(document.querySelectorAll("[data-wizard-tab]"));
     let wizardIndex = 0;
@@ -1254,6 +1255,16 @@ export async function dashboardHtml(request, env) {
       const configResult = document.getElementById("config-result");
 
       saveConfigButton.addEventListener("click", async () => {
+        if (!runtimeTokenConfigured) {
+          openRuntimeTokenGuide();
+          return;
+        }
+
+        if (!d1Bound) {
+          openD1Guide();
+          return;
+        }
+
         saveConfigButton.disabled = true;
         configResult.textContent = "正在保存规则...";
 
@@ -1283,7 +1294,16 @@ export async function dashboardHtml(request, env) {
             showWizardStep(2);
           }
         } catch (error) {
-          configResult.textContent = "保存失败：" + (error.message || error);
+          const message = String(error.message || error);
+
+          if (message.includes("D1 binding DB is required")) {
+            openD1Guide();
+            configResult.textContent = "请先绑定 D1 数据库。";
+          } else if (message.includes("unauthorized")) {
+            configResult.textContent = "保存失败：请先完成初始化或登录工作台。";
+          } else {
+            configResult.textContent = "保存失败：" + message;
+          }
         } finally {
           saveConfigButton.disabled = false;
         }
@@ -1349,7 +1369,17 @@ export async function dashboardHtml(request, env) {
             window.location.reload();
           }
         } catch (error) {
-          result.textContent = "创建失败：" + (error.message || error);
+          const message = String(error.message || error);
+
+          if (message.includes("D1 binding DB is required")) {
+            openD1Guide();
+            result.textContent = "请先绑定 D1 数据库。";
+          } else if (message.includes("unauthorized")) {
+            openRuntimeTokenGuide();
+            result.textContent = "请先配置运行时密钥。";
+          } else {
+            result.textContent = "创建失败：" + message;
+          }
         } finally {
           adminSetupButton.disabled = false;
         }
@@ -1434,7 +1464,19 @@ export async function dashboardHtml(request, env) {
             window.location.reload();
           }, 700);
         } catch (error) {
-          result.textContent = "安装失败：" + (error.message || error);
+          const message = String(error.message || error);
+
+          if (message.includes("CLOUDFLARE_API_TOKEN is not configured")) {
+            openRuntimeTokenGuide();
+            result.textContent = "请先配置运行时密钥。";
+          } else if (message.includes("D1 binding DB is required")) {
+            openD1Guide();
+            result.textContent = "请先绑定 D1 数据库。";
+          } else if (message.includes("unauthorized")) {
+            result.textContent = "安装失败：请先登录工作台。";
+          } else {
+            result.textContent = "安装失败：" + message;
+          }
         } finally {
           button.disabled = false;
         }
@@ -1457,7 +1499,7 @@ export async function dashboardHtml(request, env) {
 }
 
 export async function statusResponse(request, env) {
-  const status = await getRuntimeStatus(env, new URL(request.url).origin);
+  const status = await safeRuntimeStatus(env, new URL(request.url).origin);
 
   return new Response(JSON.stringify(status, null, 2), {
     headers: {
@@ -1491,7 +1533,54 @@ async function getRuntimeStatus(env, origin) {
   };
 }
 
+async function safeRuntimeStatus(env, origin) {
+  try {
+    return await getRuntimeStatus(env, origin);
+  } catch (error) {
+    console.error("runtime_status_failed", error);
+
+    return {
+      installed: false,
+      checked: false,
+      reason: error?.message || "runtime_status_failed",
+      worker_url: origin,
+      decision_url: `${origin}/__edge-waf/decision`,
+      install_url: `${origin}/__edge-waf/install`,
+      cloudflare_api_token_configured: Boolean(env.CLOUDFLARE_API_TOKEN),
+      protected_hostname: "",
+      protected_path_prefix: "",
+      cloudflare_zone_id: "",
+      cloudflare_zone_name: "",
+      snippet_name: "edge_waf_gate",
+      snippet_expression: "",
+      snippet_rules: [],
+      config_source: "env",
+      d1_bound: false,
+      zone_configured: false,
+      kv_bound: Boolean(env.KV)
+    };
+  }
+}
+
+async function safeAuthState(request, env) {
+  try {
+    return await getAuthState(request, env);
+  } catch (error) {
+    console.error("auth_state_failed", error);
+
+    return {
+      available: false,
+      has_users: false,
+      user: null
+    };
+  }
+}
+
 function renderMainPanel(status, auth, installed) {
+  if (!installed && auth.has_users && !auth.user) {
+    return loginPanel();
+  }
+
   if (!installed) {
     return installPanel(status, auth);
   }

@@ -14,10 +14,13 @@ const ZONE_ID_NAMES = [
 ];
 
 export async function installSnippet(request, env) {
-  const auth = request.headers.get("x-api-token") || new URL(request.url).searchParams.get("token") || "";
   const authState = await getAuthState(request, env);
 
-  if (!env.CLOUDFLARE_API_TOKEN || (auth !== env.CLOUDFLARE_API_TOKEN && !authState.user)) {
+  if (!env.CLOUDFLARE_API_TOKEN) {
+    return jsonResponse({ error: "CLOUDFLARE_API_TOKEN is not configured" }, 400);
+  }
+
+  if (!authState.user) {
     return jsonResponse({ error: "unauthorized" }, 401);
   }
 
