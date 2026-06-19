@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 
 const DEFAULTS = {
   workerName: "edge-waf-v0-1",
-  d1Database: "edge-waf-v0-db",
+  d1Database: "edge_waf_db",
   kvNamespace: "edge-waf-v0-kv",
   snippetName: "edge_waf_gate"
 };

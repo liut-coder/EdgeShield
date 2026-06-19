@@ -10,7 +10,7 @@
         "description": "Cloudflare KV namespace for bad IP markers such as bad:<ip> = 1"
       },
       "DB": {
-        "description": "Cloudflare D1 database for EdgeShield config and Snippet rules"
+        "description": "Cloudflare D1 database named edge_waf_db for EdgeShield config, users, sessions, and Snippet rules"
       },
       "CLOUDFLARE_API_TOKEN": {
         "description": "Cloudflare API token used by the runtime installer to create the Snippet"

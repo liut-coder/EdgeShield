@@ -1145,8 +1145,9 @@ export async function dashboardHtml(request, env) {
         <ul class="modal-list">
           <li><span class="modal-step">1</span><span>打开 <a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" target="_blank" rel="noopener noreferrer">Cloudflare Workers & Pages</a>，进入当前 Worker。</span></li>
           <li><span class="modal-step">2</span><span>进入 Settings → Bindings。</span></li>
-          <li><span class="modal-step">3</span><span>添加 D1 database 绑定，变量名填写 <strong>DB</strong>。</span></li>
-          <li><span class="modal-step">4</span><span>保存并重新部署后，再回到安装页。</span></li>
+          <li><span class="modal-step">3</span><span>创建或选择 D1 数据库 <strong>edge_waf_db</strong>。</span></li>
+          <li><span class="modal-step">4</span><span>添加 D1 database 绑定，变量名填写 <strong>DB</strong>。</span></li>
+          <li><span class="modal-step">5</span><span>保存并重新部署后，再回到安装页。</span></li>
         </ul>
       </div>
       <div class="modal-actions">
@@ -1542,8 +1543,6 @@ function installPanel(status, auth) {
           </form>
 
           <div class="wizard-actions wizard-actions-end">
-            ${status.cloudflare_api_token_configured ? "" : `<button class="btn btn-secondary" type="button" data-open-runtime-token>Token 指引</button>`}
-            ${status.d1_bound ? "" : `<button class="btn btn-secondary" type="button" data-open-d1>D1 指引</button>`}
             <button class="btn btn-primary" type="button" data-wizard-next data-require-token="true" data-token-configured="${status.cloudflare_api_token_configured ? "true" : "false"}" data-require-d1="true" data-d1-bound="${status.d1_bound ? "true" : "false"}">下一步</button>
           </div>
         </div>

@@ -37,7 +37,7 @@ EdgeShield 用 Snippet 接管入口流量，用 Worker 返回 `allow / challenge
 
 | 绑定 | 必填 | 作用 |
 | --- | --- | --- |
-| `DB` | 是 | D1，保存保护范围和 Snippet 规则 |
+| `DB` | 是 | D1，数据库名建议 `edge_waf_db` |
 | `KV` | 否 | 黑名单，格式 `bad:<ip> = 1` |
 
 Token 权限：
