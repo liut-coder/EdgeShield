@@ -81,6 +81,17 @@ export async function dashboardHtml(request, env) {
       box-shadow: var(--shadow);
     }
 
+    .app-shell.setup-mode {
+      display: block;
+      min-height: auto;
+      max-width: 1120px;
+      overflow: visible;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
     .topbar {
       display: flex;
       align-items: center;
@@ -245,7 +256,22 @@ export async function dashboardHtml(request, env) {
       grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
       align-items: start;
       max-width: 980px;
-      margin: 0 auto;
+      margin: 20px auto 0;
+    }
+
+    .setup-mode .topbar,
+    .setup-mode .side,
+    .setup-mode details {
+      display: none;
+    }
+
+    .setup-mode .app-main {
+      display: block;
+    }
+
+    .setup-mode .content {
+      padding: 0;
+      overflow: visible;
     }
 
     .workspace-grid {
@@ -379,7 +405,6 @@ export async function dashboardHtml(request, env) {
 
     .wizard-brand {
       display: grid;
-      gap: 5px;
       padding: 4px 4px 10px;
       border-bottom: 1px solid var(--line-soft);
     }
@@ -387,11 +412,6 @@ export async function dashboardHtml(request, env) {
     .wizard-brand strong {
       font-size: 18px;
       line-height: 1.2;
-    }
-
-    .wizard-brand span {
-      color: var(--muted);
-      font-size: 13px;
     }
 
     .wizard-progress {
@@ -424,11 +444,6 @@ export async function dashboardHtml(request, env) {
 
     .wizard-tab span:last-child {
       display: block;
-      margin-top: 1px;
-      font-size: 12px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     .wizard-tab-num {
@@ -485,11 +500,6 @@ export async function dashboardHtml(request, env) {
 
     .wizard-title h1 {
       font-size: clamp(24px, 3vw, 32px);
-    }
-
-    .wizard-copy {
-      max-width: 620px;
-      color: var(--muted);
     }
 
     .wizard-actions {
@@ -747,6 +757,10 @@ export async function dashboardHtml(request, env) {
         border-right: 0;
       }
 
+      .app-shell.setup-mode {
+        min-height: 100vh;
+      }
+
       .topbar {
         align-items: flex-start;
       }
@@ -788,7 +802,7 @@ export async function dashboardHtml(request, env) {
       }
 
       .wizard-tab span:last-child {
-        display: none;
+        display: block;
       }
 
       .content {
@@ -821,7 +835,7 @@ export async function dashboardHtml(request, env) {
 </head>
 <body>
   <div class="app-page">
-    <div class="app-shell">
+    <div class="app-shell ${installed ? "" : "setup-mode"}">
       <header class="topbar">
         <div class="brand">
           <span class="brand-mark">E</span>
@@ -829,7 +843,6 @@ export async function dashboardHtml(request, env) {
         </div>
         <div class="topbar-actions">
           ${pill(installed ? "已安装" : "待安装", installed ? "ok" : "warn")}
-          ${pill(status.cloudflare_api_token_configured ? "Token 已配置" : "Token 未配置", status.cloudflare_api_token_configured ? "ok" : "bad")}
           ${auth.user ? pill(auth.user.username, "ok") : ""}
         </div>
       </header>
@@ -862,6 +875,11 @@ export async function dashboardHtml(request, env) {
     const wizardSteps = Array.from(document.querySelectorAll("[data-wizard-step]"));
     const wizardTabs = Array.from(document.querySelectorAll("[data-wizard-tab]"));
     let wizardIndex = 0;
+
+    function setupToken() {
+      const input = document.getElementById("setup-token");
+      return input ? input.value.trim() : "";
+    }
 
     function showWizardStep(nextIndex) {
       if (!wizardSteps.length) {
@@ -900,11 +918,10 @@ export async function dashboardHtml(request, env) {
       const configResult = document.getElementById("config-result");
 
       saveConfigButton.addEventListener("click", async () => {
-        const tokenInput = document.getElementById("config-token");
-        const token = tokenInput ? tokenInput.value.trim() : "";
+        const token = setupToken();
 
-        if (tokenInput && !token) {
-          configResult.textContent = "请输入 CLOUDFLARE_API_TOKEN。";
+        if (wizardSteps.length && !token) {
+          configResult.textContent = "请先在授权步骤输入 Token。";
           return;
         }
 
@@ -949,18 +966,22 @@ export async function dashboardHtml(request, env) {
 
     if (adminSetupButton) {
       adminSetupButton.addEventListener("click", async () => {
-        const tokenInput = document.getElementById("admin-setup-token");
+        if (adminSetupButton.dataset.skipSetup === "true") {
+          showWizardStep(3);
+          return;
+        }
+
         const passwordInput = document.getElementById("admin-password");
         const result = document.getElementById("admin-setup-result");
 
-        if (!tokenInput || !passwordInput) {
+        if (!passwordInput) {
           showWizardStep(3);
           return;
         }
 
         const username = document.getElementById("admin-username").value.trim();
         const password = passwordInput.value;
-        const token = tokenInput.value.trim();
+        const token = setupToken();
 
         if (!password && adminSetupButton.textContent.includes("下一步")) {
           showWizardStep(3);
@@ -968,7 +989,7 @@ export async function dashboardHtml(request, env) {
         }
 
         if (!username || !password || !token) {
-          result.textContent = "请填写用户名、密码和 Token。";
+          result.textContent = "请填写用户名、密码，并先完成授权。";
           return;
         }
 
@@ -1058,10 +1079,10 @@ export async function dashboardHtml(request, env) {
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const token = document.getElementById("install-token").value.trim();
+        const token = setupToken();
 
         if (!token) {
-          result.textContent = "请输入 CLOUDFLARE_API_TOKEN。";
+          result.textContent = "请先在授权步骤输入 Token。";
           return;
         }
 
@@ -1170,13 +1191,12 @@ function installPanel(status, auth) {
     <aside class="wizard-side" aria-label="安装进度">
       <div class="wizard-brand">
         <strong>安装 EdgeShield</strong>
-        <span>检测配置后创建 Snippet</span>
       </div>
       <div class="wizard-progress">
-        ${wizardTab(0, "检测", "运行时变量", true)}
-        ${wizardTab(1, "范围", "保护目标", false)}
-        ${wizardTab(2, "账号", "工作台登录", false)}
-        ${wizardTab(3, "安装", "创建 Snippet", false)}
+        ${wizardTab(0, "授权", "", true)}
+        ${wizardTab(1, "规则", "", false)}
+        ${wizardTab(2, "账号", "", false)}
+        ${wizardTab(3, "安装", "", false)}
       </div>
     </aside>
 
@@ -1185,17 +1205,21 @@ function installPanel(status, auth) {
         <div class="wizard-page">
           <div class="wizard-title">
             <div>
-              <h1>检测配置</h1>
-              <p class="wizard-copy">已配置就直接下一步；缺少时再去 Cloudflare 的运行时变量和密钥里补齐。</p>
+              <h1>授权</h1>
             </div>
-            ${pill(status.cloudflare_api_token_configured ? "Token 已配置" : "Token 未配置", status.cloudflare_api_token_configured ? "ok" : "bad")}
           </div>
 
-          <div class="check-list">
-            ${checkItem("CLOUDFLARE_API_TOKEN", "密钥，权限需要 Snippets:Edit 和 Zone:Read", status.cloudflare_api_token_configured)}
-            ${checkItem("PROTECTED_HOSTNAME", status.protected_hostname || "要保护的域名", Boolean(status.protected_hostname))}
-            ${checkItem("PROTECTED_PATH_PREFIX", status.protected_path_prefix || "可选，默认保护全部路径", true)}
-          </div>
+          <form>
+            <label>
+              Cloudflare Token
+              <input id="setup-token" type="password" autocomplete="off" placeholder="只在本次安装流程中使用">
+            </label>
+            <div class="check-list">
+              ${checkItem("Token 状态", status.cloudflare_api_token_configured ? "运行时密钥已配置" : "运行时密钥缺失", status.cloudflare_api_token_configured)}
+              ${checkItem("D1 数据库", status.d1_bound ? "已绑定" : "未绑定", status.d1_bound)}
+              ${checkItem("KV 黑名单", status.kv_bound ? "已绑定" : "未绑定，可稍后配置", true)}
+            </div>
+          </form>
 
           <div class="wizard-actions wizard-actions-end">
             <button class="btn btn-primary" type="button" data-wizard-next>下一步</button>
@@ -1208,31 +1232,26 @@ function installPanel(status, auth) {
           <div class="wizard-title">
             <div>
               <h1>规则</h1>
-              <p class="wizard-copy">规则保存到 D1。Snippet 安装时读取这里的最新表达式。</p>
             </div>
             ${pill(status.d1_bound ? "D1 已绑定" : "D1 未绑定", status.d1_bound ? "ok" : "bad")}
           </div>
 
           <form id="config-form">
             <label>
-              PROTECTED_HOSTNAME
+              保护域名
               <input id="protected-hostname" name="protected_hostname" autocomplete="off" placeholder="www.example.com" value="${escapeAttribute(status.protected_hostname || "")}">
             </label>
             <label>
-              PROTECTED_PATH_PREFIX
-              <input id="protected-path-prefix" name="protected_path_prefix" autocomplete="off" placeholder="/login，可留空" value="${escapeAttribute(status.protected_path_prefix || "")}">
+              路径前缀
+              <input id="protected-path-prefix" name="protected_path_prefix" autocomplete="off" placeholder="可留空" value="${escapeAttribute(status.protected_path_prefix || "")}">
             </label>
             <label>
-              CLOUDFLARE_ZONE_ID
+              Zone ID
               <input id="cloudflare-zone-id" name="cloudflare_zone_id" autocomplete="off" placeholder="可留空自动匹配" value="${escapeAttribute(status.cloudflare_zone_id || status.zone_id || "")}">
             </label>
             <label>
-              SNIPPET_EXPRESSION
+              Snippet 规则
               <input id="snippet-expression" name="snippet_expression" autocomplete="off" placeholder='(http.host eq "www.example.com")' value="${escapeAttribute(status.snippet_expression || "")}">
-            </label>
-            <label>
-              CLOUDFLARE_API_TOKEN
-              <input id="config-token" name="token" type="password" autocomplete="off" placeholder="用于保存配置，不会存入 D1">
             </label>
             <div id="config-result" class="result">${status.d1_bound ? "可保存到 D1。" : "绑定 D1 后可保存规则；当前只能使用运行时变量。"}</div>
           </form>
@@ -1249,7 +1268,6 @@ function installPanel(status, auth) {
           <div class="wizard-title">
             <div>
               <h1>账号</h1>
-              <p class="wizard-copy">创建工作台管理员。安装完成后用这个账号登录。</p>
             </div>
             ${pill(auth.available ? (auth.has_users ? "已创建" : "待创建") : "D1 未绑定", auth.available && auth.has_users ? "ok" : "warn")}
           </div>
@@ -1263,16 +1281,12 @@ function installPanel(status, auth) {
               密码
               <input id="admin-password" name="password" type="password" autocomplete="new-password" placeholder="至少 10 位">
             </label>
-            <label>
-              CLOUDFLARE_API_TOKEN
-              <input id="admin-setup-token" name="token" type="password" autocomplete="off" placeholder="用于首次创建管理员">
-            </label>
-            <div id="admin-setup-result" class="result">${auth.has_users ? "管理员已创建。" : "Token 只用于初始化，不会保存。"}</div>
+            <div id="admin-setup-result" class="result">${auth.has_users ? "管理员已创建。" : "创建后用于登录工作台。"}</div>
           </form>
 
           <div class="wizard-actions">
             <button class="btn btn-secondary" type="button" data-wizard-prev>上一步</button>
-            <button class="btn btn-primary" id="setup-admin-button" type="button">${auth.has_users ? "下一步" : "创建并继续"}</button>
+            <button class="btn btn-primary" id="setup-admin-button" type="button" data-skip-setup="${auth.has_users ? "true" : "false"}">${auth.has_users ? "下一步" : "创建并继续"}</button>
           </div>
         </div>
       </div>
@@ -1282,17 +1296,12 @@ function installPanel(status, auth) {
           <div class="wizard-title">
             <div>
               <h1>安装 Snippet</h1>
-              <p class="wizard-copy">输入运行时密钥里的同一个 Token。安装完成后自动进入工作台。</p>
             </div>
             ${pill("最后一步", "warn")}
           </div>
 
           <form id="install-form">
-            <label>
-              CLOUDFLARE_API_TOKEN
-              <input id="install-token" name="token" type="password" autocomplete="off" placeholder="用于确认安装权限，不会写入代码" required>
-            </label>
-            <div id="result" class="result">安装完成后自动进入工作台。</div>
+            <div id="result" class="result">安装会使用授权步骤中的 Token。</div>
             ${reason}
             <div class="wizard-actions">
               <button class="btn btn-secondary" type="button" data-wizard-prev>上一步</button>
@@ -1396,19 +1405,19 @@ function workspacePanel(status, user) {
         <div class="panel-body">
           <form id="config-form">
             <label>
-              PROTECTED_HOSTNAME
+              保护域名
               <input id="protected-hostname" name="protected_hostname" autocomplete="off" value="${escapeAttribute(status.protected_hostname || "")}">
             </label>
             <label>
-              PROTECTED_PATH_PREFIX
+              路径前缀
               <input id="protected-path-prefix" name="protected_path_prefix" autocomplete="off" placeholder="全部路径" value="${escapeAttribute(status.protected_path_prefix || "")}">
             </label>
             <label>
-              CLOUDFLARE_ZONE_ID
+              Zone ID
               <input id="cloudflare-zone-id" name="cloudflare_zone_id" autocomplete="off" placeholder="自动匹配" value="${escapeAttribute(status.cloudflare_zone_id || status.zone_id || "")}">
             </label>
             <label>
-              SNIPPET_EXPRESSION
+              Snippet 规则
               <input id="snippet-expression" name="snippet_expression" autocomplete="off" value="${escapeAttribute(status.snippet_expression || "")}">
             </label>
             <div id="config-result" class="result">保存后重新安装 Snippet 生效。</div>
@@ -1446,7 +1455,6 @@ function wizardTab(index, title, meta, active) {
     <span class="wizard-tab-num">${index + 1}</span>
     <span>
       <strong>${escapeHtml(title)}</strong>
-      <span>${escapeHtml(meta)}</span>
     </span>
   </button>`;
 }

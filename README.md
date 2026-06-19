@@ -11,7 +11,7 @@ EdgeShield 用 Snippet 接管入口流量，用 Worker 返回 `allow / challenge
 
 ## 部署
 
-在 Cloudflare Workers & Pages 里选择 `Continue with GitHub`，选中本仓库。
+打开 [Cloudflare Workers & Pages](https://dash.cloudflare.com/?to=/:account/workers-and-pages)，选择 `Continue with GitHub`，选中本仓库。
 
 | 配置项 | 填写 |
 | --- | --- |
@@ -25,13 +25,13 @@ EdgeShield 用 Snippet 接管入口流量，用 Worker 返回 `allow / challenge
 | 变量 | 必填 | 示例 | 说明 |
 | --- | --- | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | 是 | `***` | 安装 Snippet |
-| `PROTECTED_HOSTNAME` | 是 | `www.example.com` | 要保护的域名 |
-| `PROTECTED_PATH_PREFIX` | 否 | `/login` | 只保护某个路径前缀 |
+| `PROTECTED_HOSTNAME` | 否 | `www.example.com` | 可在引导页保存到 D1 |
+| `PROTECTED_PATH_PREFIX` | 否 | `/login` | 可在引导页保存到 D1 |
 | `CLOUDFLARE_ZONE_ID` | 否 | `abcdef...` | 不想自动匹配 Zone 时填写 |
 | `CLOUDFLARE_ZONE_NAME` | 否 | `example.com` | 用 Zone 名称匹配 |
 | `SNIPPET_EXPRESSION` | 否 | `(http.host eq "www.example.com")` | 覆盖自动规则 |
 
-`CLOUDFLARE_ZONE_ID` 通常不用填。只要 `CLOUDFLARE_API_TOKEN` 有 `Zone:Read`，Worker 会按 `PROTECTED_HOSTNAME` 自动匹配 Zone。
+`CLOUDFLARE_ZONE_ID` 通常不用填。只要 `CLOUDFLARE_API_TOKEN` 有 `Zone:Read`，Worker 会按保护域名自动匹配 Zone。
 
 绑定：
 
@@ -66,10 +66,10 @@ Token 权限：
 
 未安装时会进入安装页：
 
-1. 检测运行时变量
-2. 保存 D1 规则
-3. 创建管理员账号
-4. 安装 Snippet
+1. 授权
+2. 规则
+3. 账号
+4. 安装
 
 安装成功后自动进入工作台。之后刷新首页会先显示登录页。
 
