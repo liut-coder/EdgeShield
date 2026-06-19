@@ -16,7 +16,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/") {
-      return new Response(dashboardHtml(request, env), {
+      return new Response(await dashboardHtml(request, env), {
         headers: {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store"
@@ -25,7 +25,7 @@ export default {
     }
 
     if (request.method === "GET" && url.pathname === "/__edge-waf/status") {
-      return statusResponse(request, env);
+      return await statusResponse(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/check.js") {

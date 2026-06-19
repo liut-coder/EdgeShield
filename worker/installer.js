@@ -11,9 +11,9 @@ const ZONE_ID_NAMES = [
 ];
 
 export async function installSnippet(request, env) {
-  const auth = request.headers.get("x-install-token") || new URL(request.url).searchParams.get("token") || "";
+  const auth = request.headers.get("x-api-token") || new URL(request.url).searchParams.get("token") || "";
 
-  if (!env.INSTALL_TOKEN || auth !== env.INSTALL_TOKEN) {
+  if (!env.CLOUDFLARE_API_TOKEN || auth !== env.CLOUDFLARE_API_TOKEN) {
     return jsonResponse({ error: "unauthorized" }, 401);
   }
 
@@ -35,11 +35,53 @@ export async function installSnippet(request, env) {
 
   return jsonResponse({
     ok: true,
+    installed: true,
     zone_id: zoneId,
     snippet_name: snippetName,
     snippet_expression: snippetExpression,
     decision_url: decisionUrl
   });
+}
+
+export async function getInstallStatus(env, origin) {
+  const apiToken = firstEnv(env, ["CLOUDFLARE_API_TOKEN"]);
+  const snippetName = env.SNIPPET_NAME || "edge_waf_gate";
+  const snippetExpression = env.SNIPPET_EXPRESSION || buildSnippetExpression(env);
+
+  if (!apiToken) {
+    return {
+      installed: false,
+      checked: false,
+      reason: "CLOUDFLARE_API_TOKEN is not configured",
+      snippet_name: snippetName,
+      snippet_expression: snippetExpression,
+      decision_url: `${origin}/__edge-waf/decision`
+    };
+  }
+
+  try {
+    const zoneId = await resolveZoneId(env, apiToken);
+    const rules = await listSnippetRules(apiToken, zoneId);
+    const rule = rules.find((item) => item.snippet_name === snippetName);
+
+    return {
+      installed: Boolean(rule?.enabled),
+      checked: true,
+      zone_id: zoneId,
+      snippet_name: snippetName,
+      snippet_expression: rule?.expression || snippetExpression,
+      decision_url: `${origin}/__edge-waf/decision`
+    };
+  } catch (error) {
+    return {
+      installed: false,
+      checked: false,
+      reason: error.message || "install_status_unknown",
+      snippet_name: snippetName,
+      snippet_expression: snippetExpression,
+      decision_url: `${origin}/__edge-waf/decision`
+    };
+  }
 }
 
 async function resolveZoneId(env, apiToken) {
@@ -105,6 +147,14 @@ async function findZone(apiToken, zoneName) {
 async function listZones(apiToken) {
   const body = await cloudflareFetch(apiToken, "/zones?per_page=50");
   return Array.isArray(body?.result) ? body.result : [];
+}
+
+async function listSnippetRules(apiToken, zoneId) {
+  const body = await cloudflareFetch(apiToken, `/zones/${zoneId}/snippets/snippet_rules`, {
+    allowNotFound: true
+  });
+
+  return normalizeRules(body?.result ?? body);
 }
 
 async function uploadSnippet({ apiToken, zoneId, snippetName, source }) {

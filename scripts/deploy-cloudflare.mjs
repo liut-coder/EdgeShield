@@ -38,7 +38,7 @@ if (!config.snippetExpression.trim()) {
   await deployWorkerOnly();
   console.log("");
   console.log("Worker deployed in runtime variable mode.");
-  console.log("Next step: call POST /__edge-waf/install with x-install-token after runtime variables are configured.");
+  console.log("Next step: open the Worker dashboard or call POST /__edge-waf/install with x-api-token.");
   process.exit(0);
 }
 

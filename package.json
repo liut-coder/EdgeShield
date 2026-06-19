@@ -9,9 +9,6 @@
       "KV": {
         "description": "Cloudflare KV namespace for bad IP markers such as bad:<ip> = 1"
       },
-      "INSTALL_TOKEN": {
-        "description": "Random token required by POST /__edge-waf/install"
-      },
       "CLOUDFLARE_API_TOKEN": {
         "description": "Cloudflare API token used by the runtime installer to create the Snippet"
       },

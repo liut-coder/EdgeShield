@@ -1,7 +1,10 @@
-export function dashboardHtml(request, env) {
+import { getInstallStatus } from "./installer.js";
+
+export async function dashboardHtml(request, env) {
   const url = new URL(request.url);
-  const status = getRuntimeStatus(env, url.origin);
+  const status = await getRuntimeStatus(env, url.origin);
   const statusJson = escapeHtml(JSON.stringify(status, null, 2));
+  const installed = status.installed === true;
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -51,6 +54,11 @@ export function dashboardHtml(request, env) {
       justify-content: space-between;
       gap: 20px;
       padding: 22px 0 28px;
+    }
+
+    .topline {
+      color: var(--muted);
+      font-size: 14px;
     }
 
     h1 {
@@ -133,6 +141,11 @@ export function dashboardHtml(request, env) {
 
     .bad {
       color: var(--bad);
+    }
+
+    .stack {
+      display: grid;
+      gap: 14px;
     }
 
     form {
@@ -220,6 +233,16 @@ export function dashboardHtml(request, env) {
       overflow-wrap: anywhere;
     }
 
+    details {
+      margin-top: 14px;
+    }
+
+    summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
     @media (max-width: 820px) {
       header,
       .grid,
@@ -242,16 +265,16 @@ export function dashboardHtml(request, env) {
     <header>
       <div>
         <h1>EdgeShield 控制台</h1>
-        <p>查看运行状态，安装 Snippet，并确认 Worker 决策入口。</p>
+        <div class="topline">${installed ? "工作台" : "安装"}</div>
       </div>
-      <span class="badge">Workers + Snippets</span>
+      <span class="badge">${installed ? "已安装" : "待安装"}</span>
     </header>
 
     <section class="grid">
       <div class="panel">
         <h2>运行状态</h2>
         <div class="cards">
-          ${statusCard("Install Token", status.install_token_configured)}
+          ${statusCard("Snippet", installed ? "已安装" : "未安装", installed)}
           ${statusCard("Cloudflare API Token", status.cloudflare_api_token_configured)}
           ${statusCard("保护域名", status.protected_hostname || "未设置", Boolean(status.protected_hostname))}
           ${statusCard("KV 黑名单", status.kv_bound ? "已绑定" : "未绑定", status.kv_bound)}
@@ -263,59 +286,58 @@ export function dashboardHtml(request, env) {
         </div>
       </div>
 
-      <div class="panel">
-        <h2>安装 Snippet</h2>
-        <form id="install-form">
-          <input id="install-token" name="token" type="password" autocomplete="off" placeholder="输入 INSTALL_TOKEN" required>
-          <button id="install-button" type="submit">安装 / 更新 Snippet</button>
-        </form>
-        <div id="result">安装会调用 <code>/__edge-waf/install</code>，不会在页面保存口令。</div>
-      </div>
+      ${installed ? workspacePanel(status) : installPanel(status)}
     </section>
 
-    <section class="panel" style="margin-top: 18px;">
-      <h2>当前配置</h2>
+    <details>
+      <summary>诊断信息</summary>
       <pre id="status-json">${statusJson}</pre>
-    </section>
+    </details>
   </main>
 
   <script>
     const form = document.getElementById("install-form");
-    const button = document.getElementById("install-button");
-    const result = document.getElementById("result");
 
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const token = document.getElementById("install-token").value.trim();
+    if (form) {
+      const button = document.getElementById("install-button");
+      const result = document.getElementById("result");
 
-      if (!token) {
-        result.textContent = "请先输入 INSTALL_TOKEN。";
-        return;
-      }
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const token = document.getElementById("install-token").value.trim();
 
-      button.disabled = true;
-      result.textContent = "正在安装 Snippet...";
-
-      try {
-        const response = await fetch("/__edge-waf/install", {
-          method: "POST",
-          headers: {
-            "x-install-token": token
-          }
-        });
-        const data = await response.json();
-
-        if (!response.ok || !data.ok) {
-          throw new Error(data.error || "install_failed");
+        if (!token) {
+          result.textContent = "请先输入 CLOUDFLARE_API_TOKEN。";
+          return;
         }
 
-        result.innerHTML = "安装完成。Snippet: <code>" + escapeText(data.snippet_name) + "</code>";
-      } catch (error) {
-        result.textContent = "安装失败：" + (error.message || error);
-      } finally {
-        button.disabled = false;
-      }
-    });
+        button.disabled = true;
+        result.textContent = "正在安装 Snippet...";
+
+        try {
+          const response = await fetch("/__edge-waf/install", {
+            method: "POST",
+            headers: {
+              "x-api-token": token
+            }
+          });
+          const data = await response.json();
+
+          if (!response.ok || !data.ok) {
+            throw new Error(data.error || "install_failed");
+          }
+
+          result.innerHTML = "安装完成，正在进入工作台...";
+          setTimeout(() => {
+            window.location.reload();
+          }, 700);
+        } catch (error) {
+          result.textContent = "安装失败：" + (error.message || error);
+        } finally {
+          button.disabled = false;
+        }
+      });
+    }
 
     document.querySelectorAll("[data-copy]").forEach((copyButton) => {
       copyButton.addEventListener("click", async () => {
@@ -342,8 +364,10 @@ export function dashboardHtml(request, env) {
 </html>`;
 }
 
-export function statusResponse(request, env) {
-  return new Response(JSON.stringify(getRuntimeStatus(env, new URL(request.url).origin), null, 2), {
+export async function statusResponse(request, env) {
+  const status = await getRuntimeStatus(env, new URL(request.url).origin);
+
+  return new Response(JSON.stringify(status, null, 2), {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store"
@@ -351,21 +375,22 @@ export function statusResponse(request, env) {
   });
 }
 
-function getRuntimeStatus(env, origin) {
+async function getRuntimeStatus(env, origin) {
   const protectedHostname = firstEnv(env, ["PROTECTED_HOSTNAME", "HOSTNAME"]);
   const protectedPathPrefix = firstEnv(env, ["PROTECTED_PATH_PREFIX", "PATH_PREFIX"]);
   const snippetExpression = env.SNIPPET_EXPRESSION || buildSnippetExpression(protectedHostname, protectedPathPrefix);
+  const installStatus = await getInstallStatus(env, origin);
 
   return {
+    ...installStatus,
     worker_url: origin,
     decision_url: `${origin}/__edge-waf/decision`,
     install_url: `${origin}/__edge-waf/install`,
-    install_token_configured: Boolean(env.INSTALL_TOKEN),
     cloudflare_api_token_configured: Boolean(env.CLOUDFLARE_API_TOKEN),
     protected_hostname: protectedHostname,
     protected_path_prefix: protectedPathPrefix,
-    snippet_name: env.SNIPPET_NAME || "edge_waf_gate",
-    snippet_expression: snippetExpression,
+    snippet_name: installStatus.snippet_name || env.SNIPPET_NAME || "edge_waf_gate",
+    snippet_expression: installStatus.snippet_expression || snippetExpression,
     zone_configured: Boolean(firstEnv(env, [
       "CLOUDFLARE_ZONE_ID",
       "CLOUDFLARE_ZONEID",
@@ -396,6 +421,36 @@ function statusCard(label, value, healthy = true) {
   return `<div class="item">
     <div class="label">${escapeHtml(label)}</div>
     <div class="value ${className}">${escapeHtml(display)}</div>
+  </div>`;
+}
+
+function installPanel(status) {
+  const reason = status.reason ? `<p class="bad">${escapeHtml(status.reason)}</p>` : "";
+
+  return `<div class="panel">
+    <h2>安装</h2>
+    ${reason}
+    <form id="install-form">
+      <input id="install-token" name="token" type="password" autocomplete="off" placeholder="输入 CLOUDFLARE_API_TOKEN" required>
+      <button id="install-button" type="submit">安装 Snippet</button>
+    </form>
+    <div id="result">安装完成后自动进入工作台。</div>
+  </div>`;
+}
+
+function workspacePanel(status) {
+  return `<div class="panel">
+    <h2>工作台</h2>
+    <div class="stack">
+      <div class="cards">
+        ${statusCard("Snippet", status.snippet_name || "edge_waf_gate", true)}
+        ${statusCard("规则", "启用中", true)}
+      </div>
+      <div class="endpoint">
+        <code id="install-url">${escapeHtml(status.install_url)}</code>
+        <button class="secondary" type="button" data-copy="install-url">复制安装接口</button>
+      </div>
+    </div>
   </div>`;
 }
 
