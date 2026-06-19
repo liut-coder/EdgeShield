@@ -82,14 +82,9 @@ export async function dashboardHtml(request, env) {
     }
 
     .app-shell.setup-mode {
-      display: block;
-      min-height: auto;
+      min-height: calc(100vh - 40px);
       max-width: 1120px;
-      overflow: visible;
-      border: 0;
-      border-radius: 0;
-      background: transparent;
-      box-shadow: none;
+      overflow: hidden;
     }
 
     .topbar {
@@ -256,22 +251,162 @@ export async function dashboardHtml(request, env) {
       grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
       align-items: start;
       max-width: 980px;
-      margin: 20px auto 0;
+      margin: 0 auto;
     }
 
-    .setup-mode .topbar,
     .setup-mode .side,
     .setup-mode details {
       display: none;
     }
 
     .setup-mode .app-main {
-      display: block;
+      display: grid;
+      grid-template-columns: 1fr;
+      min-height: 0;
     }
 
     .setup-mode .content {
+      padding: 28px;
+      overflow: auto;
+    }
+
+    .setup-mode .wizard-side,
+    .setup-mode .wizard-card {
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .setup-mode .wizard-side {
       padding: 0;
-      overflow: visible;
+    }
+
+    .setup-mode .install-screen {
+      gap: 28px;
+    }
+
+    .setup-mode .wizard-brand {
+      border: 0;
+      padding: 6px 4px 14px;
+    }
+
+    .setup-mode .wizard-progress {
+      gap: 8px;
+    }
+
+    .setup-mode .wizard-tab {
+      min-height: 46px;
+      border-color: transparent;
+      background: rgb(255 255 255 / 56%);
+      color: var(--muted);
+    }
+
+    .setup-mode .wizard-tab:hover {
+      background: #fff;
+      color: var(--text);
+    }
+
+    .setup-mode .wizard-tab.active {
+      border-color: color-mix(in srgb, var(--brand) 28%, var(--line));
+      background: #fff;
+      box-shadow: 0 8px 18px rgb(15 23 42 / 6%);
+    }
+
+    .setup-mode .wizard-page {
+      min-height: 520px;
+      padding: 6px 4px 4px;
+    }
+
+    .setup-mode .wizard-title {
+      padding-bottom: 18px;
+    }
+
+    .setup-mode .wizard-title h1 {
+      font-size: clamp(30px, 4vw, 40px);
+    }
+
+    .setup-mode form {
+      max-width: 640px;
+    }
+
+    .setup-mode input {
+      height: 46px;
+      border-color: #cfd8e6;
+      background: rgb(255 255 255 / 82%);
+    }
+
+    .setup-mode .check-list,
+    .setup-mode .kv-list {
+      max-width: 680px;
+    }
+
+    .setup-mode .check-item,
+    .setup-mode .kv {
+      background: rgb(255 255 255 / 70%);
+      border-color: var(--line-soft);
+    }
+
+    .setup-mode .wizard-actions {
+      max-width: 640px;
+      border-top-color: var(--line-soft);
+    }
+
+    .install-final {
+      display: grid;
+      align-content: start;
+      max-width: 720px;
+      gap: 18px;
+    }
+
+    .install-emblem {
+      display: grid;
+      width: 76px;
+      height: 76px;
+      place-items: center;
+      border-radius: 18px;
+      background: var(--brand);
+      color: #fff;
+      font-size: 34px;
+      font-weight: 900;
+      box-shadow: 0 18px 34px rgb(243 128 32 / 24%);
+    }
+
+    .install-summary {
+      display: grid;
+      gap: 10px;
+    }
+
+    .install-summary-row {
+      display: grid;
+      grid-template-columns: minmax(130px, .42fr) minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 54px;
+      border-bottom: 1px solid var(--line-soft);
+      color: var(--muted);
+    }
+
+    .install-summary-row strong {
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .install-summary-row span {
+      overflow-wrap: anywhere;
+    }
+
+    .install-final-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 6px;
+    }
+
+    .install-final-actions .btn-primary {
+      min-width: 180px;
+      min-height: 46px;
+      font-size: 15px;
     }
 
     .workspace-grid {
@@ -1301,9 +1436,18 @@ function installPanel(status, auth) {
           </div>
 
           <form id="install-form">
-            <div id="result" class="result">安装会使用授权步骤中的 Token。</div>
+            <div class="install-final">
+              <div class="install-emblem">E</div>
+              <div class="install-summary">
+                ${installSummaryRow("保护域名", status.protected_hostname || "未设置", Boolean(status.protected_hostname))}
+                ${installSummaryRow("D1 规则", status.d1_bound ? "已就绪" : "未绑定", status.d1_bound)}
+                ${installSummaryRow("管理员", auth.has_users ? "已创建" : "未创建", auth.has_users)}
+                ${installSummaryRow("Snippet", status.snippet_name || "edge_waf_gate", true)}
+              </div>
+              <div id="result" class="result">点击安装后会创建或更新 Cloudflare Snippet。</div>
+            </div>
             ${reason}
-            <div class="wizard-actions">
+            <div class="wizard-actions install-final-actions">
               <button class="btn btn-secondary" type="button" data-wizard-prev>上一步</button>
               <button id="install-button" class="btn btn-primary" type="submit">安装 Snippet</button>
             </div>
@@ -1466,6 +1610,14 @@ function checkItem(label, value, configured) {
       <span>${escapeHtml(value)}</span>
     </span>
     ${pill(configured ? "已就绪" : "缺少", configured ? "ok" : "bad")}
+  </div>`;
+}
+
+function installSummaryRow(label, value, ok) {
+  return `<div class="install-summary-row">
+    <strong>${escapeHtml(label)}</strong>
+    <span>${escapeHtml(value)}</span>
+    ${pill(ok ? "就绪" : "缺少", ok ? "ok" : "bad")}
   </div>`;
 }
 
