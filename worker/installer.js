@@ -1,3 +1,4 @@
+import { getAuthState } from "./auth.js";
 import { buildSnippetExpression, firstEnv, getEffectiveConfig } from "./config.js";
 
 const API_BASE = "https://api.cloudflare.com/client/v4";
@@ -14,8 +15,9 @@ const ZONE_ID_NAMES = [
 
 export async function installSnippet(request, env) {
   const auth = request.headers.get("x-api-token") || new URL(request.url).searchParams.get("token") || "";
+  const authState = await getAuthState(request, env);
 
-  if (!env.CLOUDFLARE_API_TOKEN || auth !== env.CLOUDFLARE_API_TOKEN) {
+  if (!env.CLOUDFLARE_API_TOKEN || (auth !== env.CLOUDFLARE_API_TOKEN && !authState.user)) {
     return jsonResponse({ error: "unauthorized" }, 401);
   }
 

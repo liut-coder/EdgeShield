@@ -44,15 +44,21 @@ export async function setupAdminResponse(request, env) {
 
   validateCredentials(username, password);
 
+  const userId = crypto.randomUUID();
+
   await env.DB
     .prepare(`
       INSERT INTO ${USERS_TABLE} (id, username, password_hash, role, created_at)
       VALUES (?, ?, ?, 'admin', CURRENT_TIMESTAMP)
     `)
-    .bind(crypto.randomUUID(), username, await hashPassword(password))
+    .bind(userId, username, await hashPassword(password))
     .run();
 
-  return jsonResponse({ ok: true });
+  const session = await createSession(env.DB, userId);
+
+  return jsonResponse({ ok: true }, 200, {
+    "set-cookie": serializeSessionCookie(session.id, SESSION_TTL_SECONDS)
+  });
 }
 
 export async function isSetupAuthorized(request, env) {
@@ -70,6 +76,10 @@ export async function isSetupAuthorized(request, env) {
 
   if (await hasUsers(env.DB)) {
     return false;
+  }
+
+  if (env.CLOUDFLARE_API_TOKEN) {
+    return true;
   }
 
   return await verifyCloudflareApiToken(token);
@@ -94,16 +104,7 @@ export async function loginResponse(request, env) {
     return jsonResponse({ error: "invalid_credentials" }, 401);
   }
 
-  const sessionId = randomToken();
-  const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
-
-  await env.DB
-    .prepare(`
-      INSERT INTO ${SESSIONS_TABLE} (id, user_id, expires_at, created_at)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-    `)
-    .bind(sessionId, user.id, expiresAt)
-    .run();
+  const session = await createSession(env.DB, user.id);
 
   return jsonResponse({
     ok: true,
@@ -112,7 +113,7 @@ export async function loginResponse(request, env) {
       role: user.role
     }
   }, 200, {
-    "set-cookie": serializeSessionCookie(sessionId, SESSION_TTL_SECONDS)
+    "set-cookie": serializeSessionCookie(session.id, SESSION_TTL_SECONDS)
   });
 }
 
@@ -181,6 +182,24 @@ async function readSessionUser(request, db) {
     id: row.id,
     username: row.username,
     role: row.role
+  };
+}
+
+async function createSession(db, userId) {
+  const sessionId = randomToken();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
+
+  await db
+    .prepare(`
+      INSERT INTO ${SESSIONS_TABLE} (id, user_id, expires_at, created_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    `)
+    .bind(sessionId, userId, expiresAt)
+    .run();
+
+  return {
+    id: sessionId,
+    expires_at: expiresAt
   };
 }
 

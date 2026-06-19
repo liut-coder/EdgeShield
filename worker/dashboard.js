@@ -1134,23 +1134,56 @@ export async function dashboardHtml(request, env) {
     </div>
   </div>
 
+  <div class="modal-backdrop" id="d1-modal" role="dialog" aria-modal="true" aria-labelledby="d1-title">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 id="d1-title">绑定 D1 数据库</h2>
+        <button class="icon-btn" type="button" id="d1-close" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <p><strong>D1 binding DB is required</strong></p>
+        <ul class="modal-list">
+          <li><span class="modal-step">1</span><span>打开 <a href="https://dash.cloudflare.com/?to=/:account/workers-and-pages" target="_blank" rel="noopener noreferrer">Cloudflare Workers & Pages</a>，进入当前 Worker。</span></li>
+          <li><span class="modal-step">2</span><span>进入 Settings → Bindings。</span></li>
+          <li><span class="modal-step">3</span><span>添加 D1 database 绑定，变量名填写 <strong>DB</strong>。</span></li>
+          <li><span class="modal-step">4</span><span>保存并重新部署后，再回到安装页。</span></li>
+        </ul>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" type="button" id="d1-dismiss">稍后配置</button>
+        <button class="btn btn-primary" type="button" id="d1-recheck">重新检查</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const runtimeTokenConfigured = ${runtimeTokenConfigured ? "true" : "false"};
     const wizardSteps = Array.from(document.querySelectorAll("[data-wizard-step]"));
     const wizardTabs = Array.from(document.querySelectorAll("[data-wizard-tab]"));
     let wizardIndex = 0;
 
-    function setupToken() {
-      const input = document.getElementById("setup-token");
-      return input ? input.value.trim() : "";
+    function openModal(id) {
+      document.getElementById(id)?.classList.add("open");
+    }
+
+    function closeModal(id) {
+      document.getElementById(id)?.classList.remove("open");
     }
 
     function openRuntimeTokenGuide() {
-      document.getElementById("runtime-token-modal")?.classList.add("open");
+      openModal("runtime-token-modal");
+    }
+
+    function openD1Guide() {
+      openModal("d1-modal");
     }
 
     function closeRuntimeTokenGuide() {
-      document.getElementById("runtime-token-modal")?.classList.remove("open");
+      closeModal("runtime-token-modal");
+    }
+
+    function closeD1Guide() {
+      closeModal("d1-modal");
     }
 
     document.getElementById("runtime-token-close")?.addEventListener("click", closeRuntimeTokenGuide);
@@ -1159,6 +1192,15 @@ export async function dashboardHtml(request, env) {
     document.getElementById("runtime-token-modal")?.addEventListener("click", (event) => {
       if (event.target.id === "runtime-token-modal") {
         closeRuntimeTokenGuide();
+      }
+    });
+
+    document.getElementById("d1-close")?.addEventListener("click", closeD1Guide);
+    document.getElementById("d1-dismiss")?.addEventListener("click", closeD1Guide);
+    document.getElementById("d1-recheck")?.addEventListener("click", () => window.location.reload());
+    document.getElementById("d1-modal")?.addEventListener("click", (event) => {
+      if (event.target.id === "d1-modal") {
+        closeD1Guide();
       }
     });
 
@@ -1181,7 +1223,19 @@ export async function dashboardHtml(request, env) {
     }
 
     document.querySelectorAll("[data-wizard-next]").forEach((button) => {
-      button.addEventListener("click", () => showWizardStep(wizardIndex + 1));
+      button.addEventListener("click", () => {
+        if (button.dataset.requireToken === "true" && button.dataset.tokenConfigured !== "true") {
+          openRuntimeTokenGuide();
+          return;
+        }
+
+        if (button.dataset.requireD1 === "true" && button.dataset.d1Bound !== "true") {
+          openD1Guide();
+          return;
+        }
+
+        showWizardStep(wizardIndex + 1);
+      });
     });
 
     document.querySelectorAll("[data-wizard-prev]").forEach((button) => {
@@ -1199,13 +1253,6 @@ export async function dashboardHtml(request, env) {
       const configResult = document.getElementById("config-result");
 
       saveConfigButton.addEventListener("click", async () => {
-        const token = setupToken();
-
-        if (wizardSteps.length && !token) {
-          configResult.textContent = "请先在授权步骤输入 Token。";
-          return;
-        }
-
         saveConfigButton.disabled = true;
         configResult.textContent = "正在保存规则...";
 
@@ -1220,8 +1267,7 @@ export async function dashboardHtml(request, env) {
           const response = await fetch("/__edge-waf/config", {
             method: "POST",
             headers: {
-              "content-type": "application/json",
-              ...(token ? { "x-api-token": token } : {})
+              "content-type": "application/json"
             },
             body: JSON.stringify(payload)
           });
@@ -1262,15 +1308,19 @@ export async function dashboardHtml(request, env) {
 
         const username = document.getElementById("admin-username").value.trim();
         const password = passwordInput.value;
-        const token = setupToken();
 
         if (!password && adminSetupButton.textContent.includes("下一步")) {
           showWizardStep(3);
           return;
         }
 
-        if (!username || !password || !token) {
-          result.textContent = "请填写用户名、密码，并先完成授权。";
+        if (!username || !password) {
+          result.textContent = "请填写用户名和密码。";
+          return;
+        }
+
+        if (!runtimeTokenConfigured) {
+          openRuntimeTokenGuide();
           return;
         }
 
@@ -1281,8 +1331,7 @@ export async function dashboardHtml(request, env) {
           const response = await fetch("/__edge-waf/auth/setup", {
             method: "POST",
             headers: {
-              "content-type": "application/json",
-              "x-api-token": token
+              "content-type": "application/json"
             },
             body: JSON.stringify({ username, password })
           });
@@ -1360,15 +1409,9 @@ export async function dashboardHtml(request, env) {
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const token = setupToken();
 
         if (!runtimeTokenConfigured) {
           openRuntimeTokenGuide();
-          return;
-        }
-
-        if (!token) {
-          result.textContent = "请先在授权步骤输入 Token。";
           return;
         }
 
@@ -1377,10 +1420,7 @@ export async function dashboardHtml(request, env) {
 
         try {
           const response = await fetch("/__edge-waf/install", {
-            method: "POST",
-            headers: {
-              "x-api-token": token
-            }
+            method: "POST"
           });
           const data = await response.json();
 
@@ -1477,7 +1517,7 @@ function installPanel(status, auth) {
         <strong>安装 EdgeShield</strong>
       </div>
       <div class="wizard-progress">
-        ${wizardTab(0, "授权", "", true)}
+        ${wizardTab(0, "检测", "", true)}
         ${wizardTab(1, "规则", "", false)}
         ${wizardTab(2, "账号", "", false)}
         ${wizardTab(3, "安装", "", false)}
@@ -1489,15 +1529,11 @@ function installPanel(status, auth) {
         <div class="wizard-page">
           <div class="wizard-title">
             <div>
-              <h1>授权</h1>
+              <h1>检测</h1>
             </div>
           </div>
 
           <form>
-            <label>
-              Cloudflare Token
-              <input id="setup-token" type="password" autocomplete="off" placeholder="只在本次安装流程中使用">
-            </label>
             <div class="check-list">
               ${checkItem("Token 状态", status.cloudflare_api_token_configured ? "运行时密钥已配置" : "运行时密钥缺失", status.cloudflare_api_token_configured)}
               ${checkItem("D1 数据库", status.d1_bound ? "已绑定" : "未绑定", status.d1_bound)}
@@ -1506,7 +1542,9 @@ function installPanel(status, auth) {
           </form>
 
           <div class="wizard-actions wizard-actions-end">
-            <button class="btn btn-primary" type="button" data-wizard-next>下一步</button>
+            ${status.cloudflare_api_token_configured ? "" : `<button class="btn btn-secondary" type="button" data-open-runtime-token>Token 指引</button>`}
+            ${status.d1_bound ? "" : `<button class="btn btn-secondary" type="button" data-open-d1>D1 指引</button>`}
+            <button class="btn btn-primary" type="button" data-wizard-next data-require-token="true" data-token-configured="${status.cloudflare_api_token_configured ? "true" : "false"}" data-require-d1="true" data-d1-bound="${status.d1_bound ? "true" : "false"}">下一步</button>
           </div>
         </div>
       </div>
@@ -1634,11 +1672,7 @@ function adminSetupPanel() {
           密码
           <input id="admin-password" name="password" type="password" autocomplete="new-password" placeholder="至少 10 位">
         </label>
-        <label>
-          CLOUDFLARE_API_TOKEN
-          <input id="admin-setup-token" name="token" type="password" autocomplete="off" placeholder="用于首次创建管理员">
-        </label>
-        <div id="admin-setup-result" class="result">Token 只用于初始化，不会保存。</div>
+        <div id="admin-setup-result" class="result">创建后用于登录工作台。</div>
         <button class="btn btn-primary" id="setup-admin-button" type="button">创建管理员</button>
       </form>
     </div>
