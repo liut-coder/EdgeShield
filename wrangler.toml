@@ -1,4 +1,4 @@
-name = "edge-waf-v0-1"
+name = "edgewaf"
 main = "worker/index.js"
 compatibility_date = "2024-06-01"
 workers_dev = true
